@@ -89,7 +89,7 @@ export async function sessionHook(app: FastifyInstance, req: FastifyRequest): Pr
   };
 }
 
-export function requireAuth(app: FastifyInstance) {
+export function requireAuth(_app: FastifyInstance) {
   return async (req: FastifyRequest, reply: FastifyReply) => {
     if (!req.user) {
       return reply.status(401).send({ error: { code: "unauthenticated", message: "Sign in to continue." } });

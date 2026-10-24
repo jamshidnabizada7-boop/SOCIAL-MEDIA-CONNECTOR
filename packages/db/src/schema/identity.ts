@@ -5,7 +5,6 @@ import {
   integer,
   jsonb,
   pgTable,
-  smallint,
   text,
   timestamp,
   unique,

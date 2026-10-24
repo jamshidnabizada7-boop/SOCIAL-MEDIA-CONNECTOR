@@ -2,7 +2,6 @@ import { auditLogs, brands, subscriptions, users, workspaceMembers, workspaces }
 import { and, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { Role } from "@aria/shared-types";
 import { requireWorkspacePermission, requireAuth } from "../../plugins/auth.js";
 import { writeAudit } from "../../lib/audit.js";
 

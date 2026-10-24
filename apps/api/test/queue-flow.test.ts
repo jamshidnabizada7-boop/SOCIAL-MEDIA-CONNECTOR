@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { rmSync } from "node:fs";
 import path from "node:path";
-import { createDatabase, migrationsFolder, plans, publishJobs, publishTargets, posts, queueSlots, socialAccounts, socialProviders } from "@aria/db";
+import { createDatabase, migrationsFolder, plans, publishJobs, queueSlots, socialAccounts, socialProviders } from "@aria/db";
 import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
 import { nextQueueSlot } from "../src/modules/queue/routes.js";
 import { buildServer } from "../src/server.js";

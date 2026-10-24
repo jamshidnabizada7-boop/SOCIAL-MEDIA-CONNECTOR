@@ -6,7 +6,6 @@ import {
   auditLogs,
   featureFlags,
   posts,
-  providerAppConfigs,
   providerHealthState,
   publishAttempts,
   publishJobs,

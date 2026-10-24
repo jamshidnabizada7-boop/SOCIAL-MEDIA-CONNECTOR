@@ -24,16 +24,16 @@ Phases 1–2 are hard launch blockers. Phase 5 depends on platform approvals tha
 ## Phase 0 — Hygiene (½ day)
 - [x] `git init`; `.gitignore` now covers nested `node_modules/`, `dist/`, `**/tmp/`, `apps/api/.test-data/`
 - [x] Backend ESLint config, plus `npm run lint` and `npm run typecheck` scripts
-- [ ] Fix the 23 unused-import lint errors, then make the first commit
-- [ ] Delete files holding secrets or debug output:
+- [x] Fix the 23 unused-import lint errors, then make the first commit
+- [x] Delete files holding secrets or debug output:
   - `apps/api/tmp/checkcred.mts` (prints token prefixes)
   - `packages/db/tmp/*`
   - `.local/smoke3/c.txt` and `.local/smoke4/` cookie jars
   - `apps/api/.test-data/` (199 MB)
   - empty root `src/`
-- [ ] `.dockerignore`: change `dist`/`node_modules` to `**/dist`, `**/node_modules`, and add `**/.test-data`, `**/tmp`
-- [ ] Declare the missing deps: `@aria/providers-core` in api and worker, `zod` in worker
-- [ ] Remove the duplicate `sessionHook` registration (`apps/api/src/server.ts:91` vs `modules/auth/routes.ts:24`)
+- [x] `.dockerignore`: change `dist`/`node_modules` to `**/dist`, `**/node_modules`, and add `**/.test-data`, `**/tmp`
+- [x] Declare the missing deps: `@aria/providers-core` in api and worker, `zod` in worker
+- [x] Remove the duplicate `sessionHook` registration (`apps/api/src/server.ts:91` vs `modules/auth/routes.ts:24`)
 
 ## Phase 1 — Security blockers (2–3 days)
 1. **Cross-tenant IDOR** ✅verified. Every handler loads rows by id without `workspaceId`.

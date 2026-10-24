@@ -1,6 +1,5 @@
 import type {
   AdapterAccountContext,
-  AdapterPublishInput,
   AdapterPublishResult,
   PublishErrorInfo,
   SocialProviderAdapter,

@@ -777,7 +777,7 @@ export const ANALYTICS_30D: AnalyticsSeed = (() => {
   const rnd = seeded(42);
   const days = 30;
   const series: { date: string; impressions: number; engagements: number }[] = [];
-  let base = 5200;
+  const base = 5200;
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now - i * D);
     const weekday = d.getDay();

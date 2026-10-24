@@ -1,6 +1,6 @@
 import { and, eq, gte, isNotNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { publishTargets, posts, socialAccounts, remotePosts, postMetrics } from "@aria/db";
+import { publishTargets, posts, socialAccounts, postMetrics } from "@aria/db";
 import type { AriaDatabase } from "@aria/db";
 import { requireWorkspacePermission } from "../../plugins/auth.js";
 import type { FastifyRequest, FastifyReply } from "fastify";

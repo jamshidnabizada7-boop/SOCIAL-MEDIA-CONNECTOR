@@ -175,7 +175,7 @@ function NotificationsBell() {
             </span>
           </Link>
         ))}
-        {items.length === 0 && <p className="px-4 py-8 text-center text-sm text-ink-3">You're all caught up.</p>}
+        {items.length === 0 && <p className="px-4 py-8 text-center text-sm text-ink-3">You&apos;re all caught up.</p>}
       </div>
       <Link href="/notifications" className="block border-t bg-surface-2 px-4 py-2.5 text-center text-[13px] font-medium text-accent-ink hover:underline">
         View all notifications

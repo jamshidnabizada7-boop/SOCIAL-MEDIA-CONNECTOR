@@ -91,7 +91,7 @@ export function ConnectFlowApi({
       const res = await apiGet<{ url: string }>(
         `/v1/oauth/${provider}/authorize?workspaceId=${session.workspace.id}${session.brandId ? `&brandId=${session.brandId}` : ""}&format=json`
       );
-      window.location.href = res.url;
+      window.location.assign(res.url);
     } catch (err) {
       setStep({
         kind: "error",

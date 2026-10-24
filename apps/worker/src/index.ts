@@ -3,7 +3,7 @@ import { openDatabase, processPublishJob, processReconcileJob, type PublishJobPa
 import { MemoryQueueDriver } from "./queue/memory.js";
 import { BullMqQueueDriver } from "./queue/bullmq.js";
 import type { QueueDriver } from "./queue/types.js";
-import { publishJobs, publishTargets } from "@aria/db";
+import { publishJobs } from "@aria/db";
 import { and, eq, lte, or } from "drizzle-orm";
 
 const log = (msg: string, meta?: Record<string, unknown>) =>

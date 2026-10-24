@@ -152,7 +152,7 @@ export default function AnalyticsPage() {
                 }))}
               />
               <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">
-                Bluesky and Mastodon don't expose impression counts through their APIs — engagement totals are still collected.
+                Bluesky and Mastodon don&apos;t expose impression counts through their APIs — engagement totals are still collected.
               </p>
             </div>
           </Card>

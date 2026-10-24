@@ -4,7 +4,7 @@ import { notifications, oauthCredentials, socialAccounts } from "@aria/db";
 import { decryptSecret, encryptSecret } from "@aria/db";
 import type { ProviderId } from "@aria/shared-types";
 import { refreshAccessToken } from "./oauth.js";
-import { blueskyRefreshSession, DEFAULT_BLUESKY_INSTANCE } from "./bluesky.js";
+import { DEFAULT_BLUESKY_INSTANCE } from "./bluesky.js";
 
 export interface DecryptedCredential {
   accountId: string;

@@ -2,7 +2,7 @@ import { users, workspaceMembers, workspaces } from "@aria/db";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { createSession, destroySession, requireAuth, sessionHook } from "../../plugins/auth.js";
+import { createSession, destroySession, requireAuth } from "../../plugins/auth.js";
 import { writeAudit } from "../../lib/audit.js";
 
 const registerSchema = z.object({
@@ -21,8 +21,6 @@ function publicUser(u: { id: string; email: string; name: string; avatarHue: num
 }
 
 export function registerAuthRoutes(app: FastifyInstance): void {
-  app.addHook("preHandler", (req) => sessionHook(app, req));
-
   app.post(
     "/v1/auth/register",
     { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },

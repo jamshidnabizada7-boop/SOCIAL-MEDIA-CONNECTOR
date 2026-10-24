@@ -72,7 +72,7 @@ function CapabilityDialog({ open, onClose, provider }: { open: boolean; onClose:
       {caps.note && <p className="mt-3 rounded-lg border border-warn/30 bg-warn-soft p-3 text-[13px] leading-relaxed text-warn-ink">{caps.note}</p>}
       {caps.approval && caps.approval !== "approved" && (
         <p className="mt-2 rounded-lg border border-info/25 bg-info-soft p-3 text-[13px] leading-relaxed text-info-ink">
-          Production availability depends on the provider's app review — current status:{" "}
+          Production availability depends on the provider&apos;s app review — current status:{" "}
           <span className="font-semibold">{caps.approval === "pending" ? "pending audit" : "in testing"}</span>. The integration is
           built and verified against sandbox behavior; the switch flips on automatically once approved.
         </p>
@@ -294,10 +294,10 @@ function AccountsInner() {
         <Card className="p-5">
           <p className="text-[13px] font-semibold">How connections work</p>
           <p className="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-ink-2">
-            Connecting uses each network's official authorization — Aria Hub never sees your
+            Connecting uses each network&apos;s official authorization — Aria Hub never sees your
             password. Access tokens are encrypted at rest, refreshed automatically before they
             expire (with a lock so two workers never refresh the same token), and revoked with the
-            network when you disconnect. Disconnecting here does not delete anything you've already
+            network when you disconnect. Disconnecting here does not delete anything you&apos;ve already
             published.
           </p>
         </Card>

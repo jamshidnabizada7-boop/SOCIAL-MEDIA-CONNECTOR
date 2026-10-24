@@ -30,17 +30,7 @@ import type { PublishJobPayload } from "../src/pipeline/publish.js";
  *   3. Validation failures produce translated, non-retryable target errors.
  */
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const stamp = Date.now().toString(36);
-
-async function waitFor(fn: () => Promise<boolean>, ms = 10_000): Promise<boolean> {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    if (await fn()) return true;
-    await sleep(120);
-  }
-  return false;
-}
 
 describe("publish pipeline", () => {
   let handle: DatabaseHandle;

@@ -278,7 +278,7 @@ export default function ContentPage() {
             {detail.usedInCount === 0 && (
               <p className="mt-4 flex items-start gap-2 rounded-lg border border-dashed p-3 text-[12.5px] text-ink-3">
                 <FileText className="mt-0.5 size-3.5 shrink-0" />
-                This asset isn't used by any post yet. Deleting it is safe.
+                This asset isn&apos;t used by any post yet. Deleting it is safe.
               </p>
             )}
           </div>

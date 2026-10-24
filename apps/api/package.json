@@ -12,6 +12,7 @@
   "dependencies": {
     "@aria/db": "*",
     "@aria/media-core": "^0.1.0",
+    "@aria/providers-core": "*",
     "@aria/shared-types": "*",
     "@fastify/cookie": "^11.0.0",
     "@fastify/cors": "^11.0.0",

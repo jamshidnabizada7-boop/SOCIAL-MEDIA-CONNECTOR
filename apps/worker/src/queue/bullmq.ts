@@ -19,7 +19,7 @@ export class BullMqQueueDriver implements QueueDriver {
   ) {}
 
   static async create(redisUrl: string, concurrency: number): Promise<BullMqQueueDriver> {
-    const { Queue, Worker } = await import("bullmq");
+    const { Queue } = await import("bullmq");
     const created = new Map<string, BullQueueLike>();
     const factory = (name: string): BullQueueLike => {
       let q = created.get(name);

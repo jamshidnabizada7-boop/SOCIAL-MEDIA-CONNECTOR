@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { blueskyAdapter } from "../src/adapters/bluesky.js";
 import { mastodonAdapter } from "../src/adapters/mastodon.js";
 import { getAdapter, usesRealCredentials } from "../src/adapters/registry.js";
