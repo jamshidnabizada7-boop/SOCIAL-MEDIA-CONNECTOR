@@ -1,0 +1,194 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --paper: #f6f7f5;
+  --surface: #ffffff;
+  --surface-2: #fafbfa;
+  --ink: #1a1d1c;
+  --ink-2: #57615c;
+  --ink-3: #8a938e;
+  --line: #e4e7e4;
+  --line-strong: #d0d6d2;
+  --accent: #0e7059;
+  --accent-hover: #0a5c4a;
+  --accent-soft: #e4f1ec;
+  --accent-ink: #0a5444;
+  --on-accent: #f2faf7;
+  --success: #178a50;
+  --success-soft: #e3f4ea;
+  --success-ink: #116139;
+  --warn: #a85a04;
+  --warn-soft: #fbeedd;
+  --warn-ink: #8a4a03;
+  --danger: #c03a2b;
+  --danger-soft: #fbeae7;
+  --danger-ink: #9c2e22;
+  --info: #3b5fdb;
+  --info-soft: #e9edfc;
+  --info-ink: #2f4bb0;
+  --pop-shadow: 0 10px 32px rgba(15, 26, 22, 0.13), 0 2px 8px rgba(15, 26, 22, 0.07);
+  --ring: #0e7059;
+  color-scheme: light;
+}
+
+.dark {
+  --paper: #0f1312;
+  --surface: #171c1a;
+  --surface-2: #1c2220;
+  --ink: #e7ece9;
+  --ink-2: #a2ada7;
+  --ink-3: #6e7973;
+  --line: #272e2b;
+  --line-strong: #39423e;
+  --accent: #41bd98;
+  --accent-hover: #52caa7;
+  --accent-soft: #123129;
+  --accent-ink: #7fd4ba;
+  --on-accent: #0a241c;
+  --success: #3bbd7d;
+  --success-soft: #10291e;
+  --success-ink: #7ed4a8;
+  --warn: #e09a3e;
+  --warn-soft: #2f2210;
+  --warn-ink: #eec27f;
+  --danger: #e5655a;
+  --danger-soft: #341512;
+  --danger-ink: #f09c93;
+  --info: #7d9af0;
+  --info-soft: #17213b;
+  --info-ink: #a9bcf5;
+  --pop-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --ring: #41bd98;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-ink: var(--success-ink);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-ink: var(--warn-ink);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-ink: var(--danger-ink);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-ink: var(--info-ink);
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --shadow-pop: var(--pop-shadow);
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  }
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--ink-3);
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 8px;
+    border: 3px solid var(--paper);
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--line) 25%, var(--surface-2) 50%, var(--line) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  animation: rise 0.28s ease-out both;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.pop-in {
+  animation: pop-in 0.16s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

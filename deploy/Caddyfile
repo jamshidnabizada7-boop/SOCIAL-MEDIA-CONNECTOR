@@ -1,0 +1,13 @@
+:8080 {
+	# Same-origin product: one public host serves UI and API, so the
+	# SameSite=Lax session cookie stays first-party.
+	handle /v1/* {
+		reverse_proxy api:4100
+	}
+	handle /health {
+		reverse_proxy api:4100
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}

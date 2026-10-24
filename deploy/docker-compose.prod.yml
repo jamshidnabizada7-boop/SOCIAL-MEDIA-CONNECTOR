@@ -1,0 +1,93 @@
+name: ariahub-v2
+
+# Production stack: new dedicated Postgres (v2, independent of any other
+# install), API, publishing worker, and web. API + web bind to loopback only —
+# public exposure happens via a Cloudflare tunnel (outbound, no open ports).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aria}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-ariahub}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aria} -d ${POSTGRES_DB:-ariahub}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4100
+      HOST: 0.0.0.0
+      DATABASE_URL: postgres://${POSTGRES_USER:-aria}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ariahub}
+      ARIA_ENCRYPTION_KEY: ${ARIA_ENCRYPTION_KEY:?ARIA_ENCRYPTION_KEY is required}
+      APP_BASE_URL: ${APP_BASE_URL:?APP_BASE_URL is required}
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN is required}
+      ARIA_DATA_DIR: /data
+    volumes:
+      - media:/data
+    ports:
+      - "127.0.0.1:14100:4100"
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    command: ["npx", "tsx", "apps/worker/src/index.ts"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-aria}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ariahub}
+      ARIA_ENCRYPTION_KEY: ${ARIA_ENCRYPTION_KEY}
+      APP_BASE_URL: ${APP_BASE_URL}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      ARIA_DATA_DIR: /data
+    volumes:
+      - media:/data
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        NEXT_PUBLIC_DATA_MODE: api
+        # Same-origin deployment: the UI calls the API with relative paths on
+        # the single public host (see Caddyfile).
+        NEXT_PUBLIC_API_URL: ""
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:13000:3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      # 8080 belongs to the older v1 install on this host — use 18080.
+      - "127.0.0.1:18080:8080"
+
+volumes:
+  pgdata:
+  media:
