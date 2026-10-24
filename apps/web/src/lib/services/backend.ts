@@ -14,6 +14,7 @@
  */
 
 import type {
+  VariantOverride,
   Brand,
   Invoice,
   Notification,
@@ -69,6 +70,43 @@ class Poller {
 
 /* --------------------------------- Posts --------------------------------- */
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** API variant rows use providerId and the worker's setting names. */
+interface ApiVariant {
+  providerId: string;
+  caption?: string | null;
+  title?: string | null;
+  firstComment?: string | null;
+  settings?: Record<string, unknown>;
+}
+
+function toApiVariants(variants: VariantOverride[] | undefined): ApiVariant[] {
+  return (variants ?? []).map((v) => {
+    const { category, ...settings } = v.settings ?? {};
+    return {
+      providerId: v.provider,
+      caption: v.caption ?? null,
+      title: v.title ?? null,
+      firstComment: v.firstComment ?? null,
+      settings: { ...settings, ...(category ? { categoryId: category } : {}) },
+    };
+  });
+}
+
+function fromApiVariants(rows: ApiVariant[] | undefined): VariantOverride[] {
+  return (rows ?? []).map((r) => {
+    const { categoryId, ...settings } = (r.settings ?? {}) as Record<string, unknown>;
+    return {
+      provider: r.providerId as VariantOverride["provider"],
+      caption: r.caption ?? undefined,
+      title: r.title ?? undefined,
+      firstComment: r.firstComment ?? undefined,
+      settings: { ...(settings as VariantOverride["settings"]), ...(typeof categoryId === "string" ? { category: categoryId } : {}) },
+    };
+  });
+}
+
 interface ApiPostRow {
   id: string;
   title: string;
@@ -100,7 +138,7 @@ interface ApiPostRow {
   }>;
   mediaIds?: string[];
   versions?: Array<{ version: number; frozenAt: string; caption: string; mediaIds: string[]; byUserId?: string | null }>;
-  variants?: Post["variants"];
+  variants?: ApiVariant[];
 }
 
 class PostsPoller extends Poller {
@@ -145,7 +183,7 @@ export class ApiPostsService implements PostsService {
       updatedAt: row.updatedAt,
       publishedAt: row.publishedAt ?? undefined,
       aiDisclosed: row.aiDisclosed,
-      variants: row.variants ?? [],
+      variants: fromApiVariants(row.variants),
       versions:
         row.versions?.map((v) => ({
           version: v.version,
@@ -212,23 +250,31 @@ export class ApiPostsService implements PostsService {
       caption: input.caption,
       // An empty link string would fail the API's URL validation.
       link: input.link || undefined,
-      brandId: input.brandId || undefined,
+      // Demo/mock brand ids aren't UUIDs; the API only accepts real ones.
+      brandId: input.brandId && UUID_RE.test(input.brandId) ? input.brandId : undefined,
       campaign: input.campaign,
       labels: input.labels ?? [],
       accountIds: input.selectedAccountIds,
+      mediaIds: input.mediaIds ?? [],
+      variants: toApiVariants(input.variants),
+      aiDisclosed: input.aiDisclosed ?? false,
     });
     const mapped = this.mapPost(res.post);
     this.cache = [mapped, ...this.cache];
     return mapped;
   }
 
-  async updateDraft(id: string, patch: Partial<Post>): Promise<Post> {
+  async updateDraft(id: string, patch: Partial<Post> & { selectedAccountIds?: string[] }): Promise<Post> {
     const body: Record<string, unknown> = {};
     if (patch.title !== undefined) body.title = patch.title;
     if (patch.caption !== undefined) body.caption = patch.caption;
-    if (patch.link !== undefined) body.link = patch.link;
+    if (patch.link !== undefined) body.link = patch.link || null;
     if (patch.campaign !== undefined) body.campaign = patch.campaign;
     if (patch.labels !== undefined) body.labels = patch.labels;
+    if (patch.mediaIds !== undefined) body.mediaIds = patch.mediaIds;
+    if (patch.variants !== undefined) body.variants = toApiVariants(patch.variants);
+    if (patch.aiDisclosed !== undefined) body.aiDisclosed = patch.aiDisclosed;
+    if (patch.selectedAccountIds !== undefined) body.accountIds = patch.selectedAccountIds;
     const res = await apiPatch<{ post: ApiPostRow }>(`/v1/workspaces/current/posts/${id}`, body);
     const mapped = this.mapPost(res.post);
     this.cache = [mapped, ...this.cache.filter((p) => p.id !== id)];
@@ -247,13 +293,13 @@ export class ApiPostsService implements PostsService {
       title: `${src.title} (copy)`,
       caption: src.caption,
       link: src.link,
-      mediaIds: [],
+      mediaIds: src.mediaIds,
       selectedAccountIds: src.targets.map((t) => t.accountId),
       brandId: src.brandId,
       campaign: src.campaign,
       labels: src.labels,
       aiDisclosed: src.aiDisclosed,
-      variants: [],
+      variants: src.variants ?? [],
     });
   }
 

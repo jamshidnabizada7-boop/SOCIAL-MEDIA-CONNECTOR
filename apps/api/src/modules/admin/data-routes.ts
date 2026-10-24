@@ -194,9 +194,13 @@ export function registerAdminDataRoutes(app: FastifyInstance): void {
     const { jobId } = req.params as { jobId: string };
     const job = (await db.select().from(publishJobs).where(eq(publishJobs.id, jobId)).limit(1))[0];
     if (!job) return reply.status(404).send({ error: { code: "not_found", message: "Job not found." } });
+    if (job.state !== "failed" && job.state !== "dead_letter") {
+      return reply.status(409).send({ error: { code: "not_replayable", message: "Only failed or dead-lettered jobs can be replayed." } });
+    }
+    // Replays go through the publish path, whose idempotency guard skips anything already live.
     await db
       .update(publishJobs)
-      .set({ state: "pending", runAt: new Date(), attempts: 0, lastError: null, updatedAt: new Date() })
+      .set({ state: "pending", queue: "publish", runAt: new Date(), attempts: 0, lastError: null, lockedBy: null, leaseExpiresAt: null, updatedAt: new Date() })
       .where(eq(publishJobs.id, jobId));
     await db.insert(auditLogs).values({
       actorUserId: req.user!.id,

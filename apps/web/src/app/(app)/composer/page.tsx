@@ -35,19 +35,30 @@ import { NetworkPreview } from "@/components/composer/previews";
 import { ScheduleDialog } from "@/components/composer/schedule-dialog";
 import { ConnectAccountFlow as ConnectFlow } from "@/components/accounts/connect-flow";
 import { useSession, useToast } from "@/components/providers";
-import { apiPost, DATA_MODE } from "@/lib/api/client";
+import { apiGet, apiPost, DATA_MODE } from "@/lib/api/client";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
 
 const EMOJIS = ["🚀", "✨", "🎉", "💡", "🔥", "📸", "🎬", "📈", "🙌", "👀", "🎯", "✅", "💬", "🌍", "☕", "🧵", "📌", "🗓️", "❤️", "👍", "🤝", "😄", "🤔", "⭐"];
 const HASHTAGS = ["#CreateOnce", "#PublishEverywhere", "#BehindTheScenes", "#LaunchDay", "#ContentTips", "#CreatorLife", "#ProductUpdate"];
 const CAMPAIGNS = ["", "Spring launch", "Evergreen tips", "Events"];
-const PINTEREST_BOARDS = [
+/** Demo boards for mock mode; API mode loads the account's real boards. */
+const DEMO_PINTEREST_BOARDS = [
   { id: "brd_quotes", label: "Quotes & mindset" },
   { id: "brd_events", label: "Events" },
   { id: "brd_products", label: "Product shots" },
   { id: "brd_tips", label: "Tips & tutorials" },
 ];
-const YT_CATEGORIES = ["Science & Technology", "Education", "Howto & Style", "Entertainment", "People & Blogs"];
+/** YouTube category ids (videoCategories, region-independent common set). */
+const YT_CATEGORIES = [
+  { id: "28", label: "Science & Technology" },
+  { id: "27", label: "Education" },
+  { id: "26", label: "Howto & Style" },
+  { id: "24", label: "Entertainment" },
+  { id: "22", label: "People & Blogs" },
+  { id: "25", label: "News & Politics" },
+  { id: "17", label: "Sports" },
+  { id: "10", label: "Music" },
+];
 
 function adaptCaption(provider: ProviderId, caption: string): string {
   const base = caption.trim();
@@ -99,6 +110,26 @@ function ComposerInner() {
   const [linkOpen, setLinkOpen] = useState(false);
   const [mediaIds, setMediaIds] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [pinterestBoards, setPinterestBoards] = useState<Array<{ id: string; label: string }>>(
+    DATA_MODE === "api" ? [] : DEMO_PINTEREST_BOARDS
+  );
+  const pinterestAccountId = accounts.find((a) => a.provider === "pinterest" && selected.includes(a.id))?.id;
+  useEffect(() => {
+    if (DATA_MODE !== "api" || !pinterestAccountId) return;
+    let cancelled = false;
+    apiGet<{ boards: Array<{ id: string; name: string }> }>(
+      `/v1/workspaces/current/accounts/${pinterestAccountId}/pinterest/boards`
+    )
+      .then((r) => {
+        if (!cancelled) setPinterestBoards(r.boards.map((b) => ({ id: b.id, label: b.name })));
+      })
+      .catch(() => {
+        if (!cancelled) setPinterestBoards([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pinterestAccountId]);
   const [campaign, setCampaign] = useState("");
   const [labels, setLabels] = useState<string[]>([]);
   const [labelInput, setLabelInput] = useState("");
@@ -323,6 +354,12 @@ function ComposerInner() {
     variants,
   });
 
+  /** Surfaces API rejections (plan limits, validation, network) instead of failing silently. */
+  const reportError = (err: unknown, action: string) => {
+    const message = err instanceof Error ? err.message : "Something went wrong.";
+    toast({ title: `Couldn't ${action}`, description: message, variant: "error" });
+  };
+
   const saveDraft = async () => {
     setSaving(true);
     try {
@@ -334,6 +371,8 @@ function ComposerInner() {
         toast({ title: "Draft saved", description: "Find it under Posts → Drafts.", variant: "success" });
       }
       router.push("/posts?tab=drafts");
+    } catch (err) {
+      reportError(err, "save the draft");
     } finally {
       setSaving(false);
     }
@@ -355,6 +394,8 @@ function ComposerInner() {
         variant: "info",
       });
       router.push(`/posts/${id}`);
+    } catch (err) {
+      reportError(err, "publish");
     } finally {
       setPublishing(false);
     }
@@ -373,6 +414,8 @@ function ComposerInner() {
       await postsService.schedule(id, iso);
       toast({ title: "Scheduled", description: `Will publish on ${new Date(iso).toLocaleString()}.`, variant: "success" });
       router.push(`/posts/${id}`);
+    } catch (err) {
+      reportError(err, "schedule");
     } finally {
       setPublishing(false);
     }
@@ -814,7 +857,7 @@ function ComposerInner() {
                                 >
                                   <option value="">Default</option>
                                   {YT_CATEGORIES.map((c) => (
-                                    <option key={c} value={c}>{c}</option>
+                                    <option key={c.id} value={c.id}>{c.label}</option>
                                   ))}
                                 </Select>
                               </Field>
@@ -865,8 +908,8 @@ function ComposerInner() {
                                 onChange={(e) => setVariant("pinterest", { settings: { boardId: e.target.value || undefined } })}
                               >
                                 <option value="">Choose a board…</option>
-                                {PINTEREST_BOARDS.map((b) => (
-                                  <option key={b.id} value={b.label}>{b.label}</option>
+                                {pinterestBoards.map((b) => (
+                                  <option key={b.id} value={b.id}>{b.label}</option>
                                 ))}
                               </Select>
                             </Field>

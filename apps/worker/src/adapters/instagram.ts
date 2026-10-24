@@ -15,16 +15,12 @@ import { PROVIDERS } from "@aria/shared-types";
 
 /**
  * Instagram adapter. Container→publish flow with PUBLIC media URLs
- * (JPEG-only for photos, verified 2026-09-30); gated on
- * APP_PUBLIC_MEDIA_BASE_URL for the same reason as Threads.
+ * (JPEG-only for photos, verified 2026-09-30). The engine supplies each
+ * item's signed, expiring publicUrl served by the API.
  */
 
 function caps() {
   return PROVIDERS.instagram.capabilities;
-}
-
-function publicMediaBase(): string | null {
-  return process.env.APP_PUBLIC_MEDIA_BASE_URL ?? null;
 }
 
 function httpError(e: unknown): PublishErrorInfo {
@@ -80,12 +76,12 @@ export const instagramAdapter: SocialProviderAdapter = {
           retryable: false,
         };
       }
-      if (!publicMediaBase()) {
+      if (!m.publicUrl) {
         return {
           code: "public_url_required",
           title: "Media on Instagram needs a public URL",
           message:
-            "Instagram fetches media from a public URL. Set APP_PUBLIC_MEDIA_BASE_URL (a reachable origin serving your storage), or deselect Instagram.",
+            "Instagram fetches media from a public URL, so the API needs a public https address (APP_BASE_URL). Configure it, or deselect Instagram.",
           retryable: false,
         };
       }
@@ -98,10 +94,9 @@ export const instagramAdapter: SocialProviderAdapter = {
   },
   async createPost(input, ctx: AdapterAccountContext): Promise<AdapterPublishResult> {
     if (!ctx.accessToken) throw Object.assign(new Error("No Instagram token"), { code: "no_session" });
-    const base = publicMediaBase();
-    if (!base && input.content.media.length > 0) {
+    if (input.content.media.some((m) => !m.publicUrl)) {
       throw Object.assign(
-        new Error("Instagram media needs APP_PUBLIC_MEDIA_BASE_URL configured. non_retryable"),
+        new Error("Instagram media needs a public https API address (APP_BASE_URL). non_retryable"),
         { code: "public_url_required" }
       );
     }
@@ -117,8 +112,8 @@ export const instagramAdapter: SocialProviderAdapter = {
           ctx.accessToken,
           {
             mediaType: m.kind === "video" ? "VIDEO" : "IMAGE",
-            imageUrl: m.kind === "image" && m.storageKey ? `${base}/${m.storageKey}` : undefined,
-            videoUrl: m.kind === "video" && m.storageKey ? `${base}/${m.storageKey}` : undefined,
+            imageUrl: m.kind === "image" ? m.publicUrl : undefined,
+            videoUrl: m.kind === "video" ? m.publicUrl : undefined,
             isCarouselItem: true,
           }
         );
@@ -139,12 +134,12 @@ export const instagramAdapter: SocialProviderAdapter = {
         : {
             mediaType: input.content.media[0]?.kind === "video" ? "REELS" : "IMAGE",
             imageUrl:
-              input.content.media[0]?.kind === "image" && input.content.media[0].storageKey
-                ? `${base}/${input.content.media[0].storageKey}`
+              input.content.media[0]?.kind === "image" && input.content.media[0].publicUrl
+                ? input.content.media[0].publicUrl
                 : undefined,
             videoUrl:
-              input.content.media[0]?.kind === "video" && input.content.media[0].storageKey
-                ? `${base}/${input.content.media[0].storageKey}`
+              input.content.media[0]?.kind === "video" && input.content.media[0].publicUrl
+                ? input.content.media[0].publicUrl
                 : undefined,
             caption,
             altText: settings.altText,

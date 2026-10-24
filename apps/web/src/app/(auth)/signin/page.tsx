@@ -29,7 +29,6 @@ export default function SignInPage() {
     setErrors(next);
     if (Object.keys(next).length > 0) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 900));
     try {
       await signIn(email, password);
     } catch (err) {
@@ -79,11 +78,13 @@ export default function SignInPage() {
         </Button>
       </form>
 
-      <div className="my-5 flex items-center gap-3 text-[12px] text-ink-3">
-        <span className="h-px flex-1 bg-line" />
-        demo build
-        <span className="h-px flex-1 bg-line" />
-      </div>
+      {DATA_MODE === "mock" && (
+        <div className="my-5 flex items-center gap-3 text-[12px] text-ink-3">
+          <span className="h-px flex-1 bg-line" />
+          demo build
+          <span className="h-px flex-1 bg-line" />
+        </div>
+      )}
       {DATA_MODE === "mock" && (
         <Button
           variant="secondary"

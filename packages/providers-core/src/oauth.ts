@@ -5,9 +5,11 @@ import type { AriaDatabase } from "@aria/db";
 import { fetchJson, postForm, type FetchLike } from "./http.js";
 import { ensureMastodonApp } from "./mastodon.js";
 import {
+  graphBase,
   PROVIDER_OAUTH,
   redirectUriFor,
   providerName,
+  type ProviderOAuthConfig,
 } from "./config.js";
 import { getProviderCredentials } from "./db-credentials.js";
 
@@ -61,7 +63,7 @@ export async function buildAuthorizeUrl(
     );
   }
   const url = new URL(cfg.authorizeUrl({}));
-  url.searchParams.set("client_id", creds.clientId);
+  url.searchParams.set(cfg.clientIdParam ?? "client_id", creds.clientId);
   url.searchParams.set("redirect_uri", redirectUriFor(provider));
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", cfg.scopes.join(cfg.id === "tiktok" ? "," : " "));
@@ -78,6 +80,27 @@ export async function buildAuthorizeUrl(
     url.searchParams.set(k, v);
   }
   return { url: url.toString(), state, codeVerifier };
+}
+
+/** Posts a token-endpoint form with the client authentication the provider expects. */
+async function tokenRequest(
+  provider: ProviderId,
+  cfg: ProviderOAuthConfig,
+  creds: { clientId: string; clientSecret: string },
+  form: Record<string, string>,
+  fetchImpl?: FetchLike
+): Promise<Record<string, unknown>> {
+  const headers: Record<string, string> = {};
+  const body = { ...form };
+  if (cfg.clientAuth === "basic") {
+    headers.Authorization = `Basic ${Buffer.from(`${encodeURIComponent(creds.clientId)}:${encodeURIComponent(creds.clientSecret)}`).toString("base64")}`;
+    // X still wants client_id in the body alongside Basic auth for PKCE grants.
+    if (provider === "x") body.client_id = creds.clientId;
+  } else {
+    body[cfg.clientIdParam ?? "client_id"] = creds.clientId;
+    body.client_secret = creds.clientSecret;
+  }
+  return postForm<Record<string, unknown>>(providerName(provider), cfg.tokenUrl, body, { headers, fetchImpl });
 }
 
 export interface TokenGrant {
@@ -121,25 +144,36 @@ export async function exchangeCodeForTokens(input: ExchangeInput): Promise<Token
     grant_type: "authorization_code",
     code: input.code,
     redirect_uri: redirectUriFor(input.provider),
-    client_id: creds.clientId,
-    client_secret: creds.clientSecret,
   };
   if (cfg.usePkce) {
     if (!input.codeVerifier) throw new Error("Missing PKCE verifier");
     form.code_verifier = input.codeVerifier;
   }
-  const res = await postForm<Record<string, unknown>>(providerName(input.provider), cfg.tokenUrl, form, {
-    fetchImpl: input.fetchImpl,
-  });
+  const res = await tokenRequest(input.provider, cfg, creds, form, input.fetchImpl);
   const grant = grantFrom(res);
-  // Meta code-exchange tokens live ~1–2h. Swap for a long-lived (~60 day)
-  // token immediately; Page tokens and later refreshes derive from it. Falls
-  // back to the short-lived token rather than failing the connect.
+  // Threads: swap the ~1h token for a long-lived (~60 day) one on Threads'
+  // own endpoint; it is later renewed with th_refresh_token.
+  if (input.provider === "threads") {
+    try {
+      const long = await fetchJson<Record<string, unknown>>(
+        "Threads",
+        `https://graph.threads.net/access_token?grant_type=th_exchange_token&client_secret=${encodeURIComponent(creds.clientSecret)}&access_token=${encodeURIComponent(grant.accessToken)}`,
+        { fetchImpl: input.fetchImpl }
+      );
+      const extended = grantFrom(long);
+      return { ...extended, refreshToken: extended.accessToken, scopes: grant.scopes };
+    } catch {
+      return grant;
+    }
+  }
+  // Facebook/Instagram code-exchange tokens live ~1–2h. Swap for a long-lived
+  // (~60 day) token immediately; Page tokens and later refreshes derive from
+  // it. Falls back to the short-lived token rather than failing the connect.
   if (providerIsMeta(input.provider)) {
     try {
       const long = await fetchJson<Record<string, unknown>>(
         providerName(input.provider),
-        `https://graph.facebook.com/v23.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(creds.clientId)}&client_secret=${encodeURIComponent(creds.clientSecret)}&fb_exchange_token=${encodeURIComponent(grant.accessToken)}`,
+        `${graphBase()}/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(creds.clientId)}&client_secret=${encodeURIComponent(creds.clientSecret)}&fb_exchange_token=${encodeURIComponent(grant.accessToken)}`,
         { fetchImpl: input.fetchImpl }
       );
       const extended = grantFrom(long);
@@ -155,8 +189,9 @@ export async function exchangeCodeForTokens(input: ExchangeInput): Promise<Token
   return grant;
 }
 
+/** Facebook Login providers (Threads has its own OAuth and token endpoints). */
 function providerIsMeta(provider: ProviderId): boolean {
-  return provider === "facebook" || provider === "instagram" || provider === "threads";
+  return provider === "facebook" || provider === "instagram";
 }
 
 export async function refreshAccessToken(
@@ -204,21 +239,32 @@ export async function refreshAccessToken(
     if (!opts?.facebookPageId) throw new Error("Facebook refresh missing page context");
     const res = await fetchJson<{ data: Array<{ id: string; access_token: string }> }>(
       "Facebook",
-      "https://graph.facebook.com/v23.0/me/accounts?fields=access_token&limit=100",
+      `${graphBase()}/me/accounts?fields=access_token&limit=100`,
       { headers: { Authorization: `Bearer ${refreshToken}` }, fetchImpl: opts?.fetchImpl }
     );
     const page = res.data.find((p) => p.id === opts.facebookPageId);
     if (!page) throw new Error("This Page is no longer manageable by the connecting Facebook user — reconnect the account.");
-    // Keep the user token as the refresh token; rotate expiry ~45 days.
-    return { accessToken: page.access_token, refreshToken, expiresInSeconds: 45 * 86_400, raw: page };
+    // Keep the user token as the refresh token. Page tokens derived from a
+    // long-lived user token don't expire, so no expiry is recorded.
+    return { accessToken: page.access_token, refreshToken, raw: page };
   }
-  if (provider === "instagram" || provider === "threads") {
+  if (provider === "threads") {
+    // Long-lived Threads tokens (≥24h old, unexpired) renew themselves for another ~60 days.
+    const res = await fetchJson<Record<string, unknown>>(
+      "Threads",
+      `https://graph.threads.net/refresh_access_token?grant_type=th_refresh_token&access_token=${encodeURIComponent(refreshToken)}`,
+      { fetchImpl: opts?.fetchImpl }
+    );
+    const renewed = grantFrom(res);
+    return { ...renewed, refreshToken: renewed.accessToken };
+  }
+  if (provider === "instagram") {
     const cfgMeta = PROVIDER_OAUTH[provider as keyof typeof PROVIDER_OAUTH];
     const credsMeta = await getProviderCredentials(opts?.db ?? null, provider).catch(() => null);
     if (!cfgMeta || !credsMeta) throw new Error(`Provider ${provider} is not configured`);
     const res = await fetchJson<Record<string, unknown>>(
       providerName(provider),
-      `https://graph.facebook.com/v23.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(credsMeta.clientId)}&client_secret=${encodeURIComponent(credsMeta.clientSecret)}&fb_exchange_token=${encodeURIComponent(refreshToken)}`,
+      `${graphBase()}/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(credsMeta.clientId)}&client_secret=${encodeURIComponent(credsMeta.clientSecret)}&fb_exchange_token=${encodeURIComponent(refreshToken)}`,
       { fetchImpl: opts?.fetchImpl }
     );
     const extended = grantFrom(res);
@@ -227,13 +273,16 @@ export async function refreshAccessToken(
   const cfg = PROVIDER_OAUTH[provider as keyof typeof PROVIDER_OAUTH];
   const creds = await getProviderCredentials(opts?.db ?? null, provider).catch(() => null);
   if (!cfg || !creds) throw new Error(`Provider ${provider} is not configured`);
-  const res = await postForm<Record<string, unknown>>(providerName(provider), cfg.tokenUrl, {
-    grant_type: "refresh_token",
-    refresh_token: refreshToken,
-    client_id: creds.clientId,
-    client_secret: creds.clientSecret,
-  }, { fetchImpl: opts?.fetchImpl });
-  return grantFrom(res);
+  const res = await tokenRequest(
+    provider,
+    cfg,
+    creds,
+    { grant_type: "refresh_token", refresh_token: refreshToken },
+    opts?.fetchImpl
+  );
+  const grant = grantFrom(res);
+  // Providers that don't rotate refresh tokens (Google) omit it — keep the old one.
+  return { ...grant, refreshToken: grant.refreshToken ?? refreshToken };
 }
 
 function grantFrom(res: Record<string, unknown>): TokenGrant {

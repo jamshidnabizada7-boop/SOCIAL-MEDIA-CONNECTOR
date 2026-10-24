@@ -14,8 +14,8 @@
     "@aria/media-core": "^0.1.0",
     "@aria/providers-core": "*",
     "@aria/shared-types": "*",
-    "bullmq": "^5.52.0",
     "drizzle-orm": "^0.44.0",
+    "pino": "^10.3.1",
     "zod": "^4.1.0"
   },
   "devDependencies": {

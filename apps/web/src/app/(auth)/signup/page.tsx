@@ -30,7 +30,6 @@ export default function SignUpPage() {
     setErrors(next);
     if (Object.keys(next).length > 0) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1000));
     try {
       await signUp(name.trim(), email, password);
     } catch (err) {

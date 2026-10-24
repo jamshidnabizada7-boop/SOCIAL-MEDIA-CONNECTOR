@@ -1,3 +1,4 @@
+import { graphBase } from "./config.js";
 import { fetchJson, type FetchLike } from "./http.js";
 
 /**
@@ -6,7 +7,7 @@ import { fetchJson, type FetchLike } from "./http.js";
  * storage works without public URLs.
  */
 
-const GRAPH = "https://graph.facebook.com/v23.0";
+
 
 export async function facebookPostToFeed(
   pageId: string,
@@ -17,7 +18,7 @@ export async function facebookPostToFeed(
   const form: Record<string, string> = {};
   if (input.message) form.message = input.message;
   if (input.link) form.link = input.link;
-  return fetchJson<{ post_id?: string; id?: string }>("Facebook", `${GRAPH}/${pageId}/feed`, {
+  return fetchJson<{ post_id?: string; id?: string }>("Facebook", `${graphBase()}/${pageId}/feed`, {
     method: "POST",
     headers: { Authorization: `Bearer ${pageToken}`, "Content-Type": "application/json" },
     body: JSON.stringify(form),
@@ -34,7 +35,7 @@ export async function facebookUploadPhoto(
   const form = new FormData();
   form.append("source", new Blob([new Uint8Array(file.bytes)], { type: file.mime }), file.filename);
   if (file.caption) form.append("caption", file.caption);
-  return fetchJson<{ post_id?: string; id?: string }>("Facebook", `${GRAPH}/${pageId}/photos`, {
+  return fetchJson<{ post_id?: string; id?: string }>("Facebook", `${graphBase()}/${pageId}/photos`, {
     method: "POST",
     headers: { Authorization: `Bearer ${pageToken}` },
     body: form,
@@ -66,7 +67,7 @@ export async function facebookDeletePost(
   pageToken: string,
   opts?: { fetchImpl?: FetchLike }
 ): Promise<void> {
-  await fetchJson("Facebook", `${GRAPH}/${postId}`, {
+  await fetchJson("Facebook", `${graphBase()}/${postId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${pageToken}` },
     fetchImpl: opts?.fetchImpl,

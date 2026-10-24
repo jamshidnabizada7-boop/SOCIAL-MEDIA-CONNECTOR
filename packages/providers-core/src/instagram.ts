@@ -1,3 +1,4 @@
+import { graphBase } from "./config.js";
 import { fetchJson, type FetchLike } from "./http.js";
 
 /**
@@ -7,7 +8,7 @@ import { fetchJson, type FetchLike } from "./http.js";
  * Gated on a public media base URL like Threads.
  */
 
-const GRAPH = "https://graph.facebook.com/v23.0";
+
 
 export interface IgContainer {
   creationId: string;
@@ -35,7 +36,7 @@ export async function igCreateMediaContainer(
   if (input.altText) body.alt_text = input.altText;
   if (input.isCarouselItem) body.is_carousel_item = true;
   if (input.aiGenerated) body.is_ai_generated = true;
-  return fetchJson<IgContainer>("Instagram", `${GRAPH}/${igUserId}/media`, {
+  return fetchJson<IgContainer>("Instagram", `${graphBase()}/${igUserId}/media`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -49,7 +50,7 @@ export async function igContainerStatus(
   accessToken: string,
   opts?: { fetchImpl?: FetchLike }
 ): Promise<{ statusCode: "IN_PROGRESS" | "FINISHED" | "EXPIRED" | "ERROR" | "PUBLISHED" }> {
-  return fetchJson("Instagram", `${GRAPH}/${creationId}?fields=status_code`, {
+  return fetchJson("Instagram", `${graphBase()}/${creationId}?fields=status_code`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     fetchImpl: opts?.fetchImpl,
   });
@@ -61,7 +62,7 @@ export async function igPublishContainer(
   creationId: string,
   opts?: { fetchImpl?: FetchLike }
 ): Promise<{ mediaId: string }> {
-  return fetchJson<{ id: string }>("Instagram", `${GRAPH}/${igUserId}/media_publish`, {
+  return fetchJson<{ id: string }>("Instagram", `${graphBase()}/${igUserId}/media_publish`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ creation_id: creationId }),
@@ -74,7 +75,7 @@ export async function igDeleteMedia(
   accessToken: string,
   opts?: { fetchImpl?: FetchLike }
 ): Promise<void> {
-  await fetchJson("Instagram", `${GRAPH}/${mediaId}`, {
+  await fetchJson("Instagram", `${graphBase()}/${mediaId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken}` },
     fetchImpl: opts?.fetchImpl,

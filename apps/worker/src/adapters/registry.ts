@@ -10,11 +10,40 @@ import { youtubeAdapter } from "./youtube.js";
 import { xAdapter } from "./x.js";
 import { pinterestAdapter } from "./pinterest.js";
 import { getMockAdapter } from "./mock.js";
+import { PROVIDERS } from "@aria/shared-types";
 
 /**
- * Adapter registry — real integrations for every provider (Phase 5 complete).
- * Set ARIA_ADAPTER_MODE=mock to route everything through the mock adapter
- * (used by the pipeline test-suite and offline demos).
+ * Fail-closed stand-in for providers without a real integration (TikTok).
+ * Validation rejects every post with a clear, non-retryable message, so
+ * nothing is ever marked published that wasn't.
+ */
+function unsupportedAdapter(id: ProviderId): SocialProviderAdapter {
+  const name = PROVIDERS[id]?.name ?? id;
+  const error = {
+    code: "provider_not_available",
+    title: `Publishing to ${name} isn't available yet`,
+    message: `${name} publishing is not enabled on this server. Remove ${name} from the post's destinations.`,
+    retryable: false,
+  };
+  return {
+    id,
+    capabilities: () => PROVIDERS[id].capabilities,
+    validateContent: () => error,
+    uploadMedia: async () => {
+      throw Object.assign(new Error(`${error.message} non_retryable`), { code: error.code });
+    },
+    createPost: async () => {
+      throw Object.assign(new Error(`${error.message} non_retryable`), { code: error.code });
+    },
+    getPostStatus: async () => ({ state: "failed" as const, error }),
+    normalizeError: () => error,
+  };
+}
+
+/**
+ * Adapter registry. Set ARIA_ADAPTER_MODE=mock to route everything through
+ * the mock adapter (pipeline test-suite and offline demos). Providers without
+ * a real integration fail closed — never the mock — outside mock mode.
  */
 export function getAdapter(id: ProviderId): SocialProviderAdapter {
   if (process.env.ARIA_ADAPTER_MODE === "mock") {
@@ -40,7 +69,7 @@ export function getAdapter(id: ProviderId): SocialProviderAdapter {
     case "pinterest":
       return pinterestAdapter;
     default:
-      return getMockAdapter(id);
+      return unsupportedAdapter(id);
   }
 }
 

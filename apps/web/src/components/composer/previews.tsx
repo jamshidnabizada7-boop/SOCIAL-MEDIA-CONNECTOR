@@ -231,7 +231,7 @@ function PinterestPreview({ caption, media, accountName, variant }: PreviewProps
         <div className="p-3">
           <p className="line-clamp-2 text-[13px] font-semibold leading-snug">{caption || "(Pin description)"}</p>
           <p className="mt-1.5 text-[11px] text-ink-3">
-            {board ? `Saved to ${board}` : "No board selected"}
+            {board ? "Saved to the selected board" : "No board selected"}
           </p>
         </div>
       </div>

@@ -51,6 +51,8 @@ const patchPostSchema = z.object({
   mediaIds: z.array(z.string().uuid()).max(20).optional(),
   variants: z.array(variantSchema).max(20).optional(),
   aiDisclosed: z.boolean().optional(),
+  /** Replaces the destinations. Only targets that never published can be removed. */
+  accountIds: z.array(z.string().uuid()).max(50).optional(),
   scheduledAt: z.string().datetime().nullable().optional(),
 });
 
@@ -377,10 +379,22 @@ export function registerPostRoutes(app: FastifyInstance): void {
           error: { code: "not_editable", message: "Only drafts and scheduled posts can be edited. Editing published content is not supported by most networks." },
         });
       }
-      const { scheduledAt, mediaIds, variants, ...rest } = parsed.data;
+      const { scheduledAt, mediaIds, variants, accountIds, ...rest } = parsed.data;
       if (mediaIds && (await foreignMedia(db, workspaceId, mediaIds)).length > 0) {
         return reply.status(400).send({
           error: { code: "unknown_media", message: "One or more media assets do not belong to this workspace." },
+        });
+      }
+      const wantedAccounts = accountIds ? [...new Set(accountIds)] : null;
+      const ownedAccounts = wantedAccounts?.length
+        ? await db
+            .select({ id: socialAccounts.id, providerId: socialAccounts.providerId })
+            .from(socialAccounts)
+            .where(and(eq(socialAccounts.workspaceId, workspaceId), inArray(socialAccounts.id, wantedAccounts)))
+        : [];
+      if (wantedAccounts && ownedAccounts.length !== wantedAccounts.length) {
+        return reply.status(400).send({
+          error: { code: "unknown_account", message: "One or more destinations do not belong to this workspace." },
         });
       }
       const when = scheduledAt ? new Date(scheduledAt) : null;
@@ -394,6 +408,34 @@ export function registerPostRoutes(app: FastifyInstance): void {
           .where(and(eq(posts.id, postId), eq(posts.workspaceId, workspaceId)));
         if (mediaIds) await replaceMedia(tx, postId, mediaIds);
         if (variants) await replaceVariants(tx, postId, req.user!.id, variants);
+        if (wantedAccounts) {
+          const current = await tx.select().from(publishTargets).where(eq(publishTargets.postId, postId));
+          const keep = new Set(wantedAccounts);
+          const removable = current.filter((t) => !keep.has(t.accountId) && t.state !== "published");
+          if (removable.length > 0) {
+            await supersedeJobs(tx, removable.map((t) => t.id), "destination_removed");
+            await tx.delete(publishTargets).where(inArray(publishTargets.id, removable.map((t) => t.id)));
+          }
+          const have = new Set(current.map((t) => t.accountId));
+          const post = (await tx.select().from(posts).where(eq(posts.id, postId)).limit(1))[0];
+          for (const account of ownedAccounts.filter((a) => !have.has(a.id))) {
+            const [target] = await tx
+              .insert(publishTargets)
+              .values({
+                postId,
+                accountId: account.id,
+                providerId: account.providerId,
+                state: "pending",
+                idempotencyKey: `idem_${postId}_${account.id}`,
+                scheduledAt: post.state === "scheduled" ? post.scheduledAt : undefined,
+              })
+              .onConflictDoNothing()
+              .returning();
+            if (target && post.state === "scheduled" && post.scheduledAt) {
+              await enqueueTarget(tx, target.id, post.scheduledAt, "delayed");
+            }
+          }
+        }
         if (scheduledAt !== undefined) {
           if (when) {
             await tx.update(posts).set({ scheduledAt: when, state: "scheduled" }).where(eq(posts.id, postId));

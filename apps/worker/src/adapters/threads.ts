@@ -15,16 +15,12 @@ import { PROVIDERS } from "@aria/shared-types";
 
 /**
  * Threads adapter. Text posts publish directly; image/video containers need
- * PUBLIC image/video URLs (Threads fetches them itself) — gated on
- * APP_PUBLIC_MEDIA_BASE_URL, since local storage isn't publicly reachable.
+ * PUBLIC image/video URLs (Threads fetches them itself) — the engine
+ * supplies each item's signed, expiring publicUrl served by the API.
  */
 
 function caps() {
   return PROVIDERS.threads.capabilities;
-}
-
-function publicMediaBase(): string | null {
-  return process.env.APP_PUBLIC_MEDIA_BASE_URL ?? null;
 }
 
 function httpError(e: unknown): PublishErrorInfo {
@@ -67,12 +63,12 @@ export const threadsAdapter: SocialProviderAdapter = {
           retryable: false,
         };
       }
-      if (!publicMediaBase()) {
+      if (!m.publicUrl) {
         return {
           code: "public_url_required",
           title: "Media on Threads needs a public URL",
           message:
-            "Threads fetches media from a public URL. Set APP_PUBLIC_MEDIA_BASE_URL (a reachable origin serving your storage), or post text-only.",
+            "Threads fetches media from a public URL, so the API needs a public https address (APP_BASE_URL). Configure it, or post text-only.",
           retryable: false,
         };
       }
@@ -84,18 +80,17 @@ export const threadsAdapter: SocialProviderAdapter = {
   },
   async createPost(input, ctx: AdapterAccountContext): Promise<AdapterPublishResult> {
     if (!ctx.accessToken) throw Object.assign(new Error("No Threads token"), { code: "no_session" });
-    const base = publicMediaBase();
     const media = input.content.media[0];
     const container = await threadsCreateContainer(ctx.externalAccountId, ctx.accessToken, {
       mediaType: media ? (media.kind === "video" ? "VIDEO" : "IMAGE") : "TEXT",
       text: input.content.caption || undefined,
       imageUrl:
-        media?.kind === "image" && media.storageKey && base
-          ? `${base}/${media.storageKey}`
+        media?.kind === "image" && media.publicUrl
+          ? media.publicUrl
           : undefined,
       videoUrl:
-        media?.kind === "video" && media.storageKey && base
-          ? `${base}/${media.storageKey}`
+        media?.kind === "video" && media.publicUrl
+          ? media.publicUrl
           : undefined,
     });
     // Wait for the container to finish processing (≤60s, poll per minute per docs).

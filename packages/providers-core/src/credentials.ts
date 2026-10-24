@@ -1,5 +1,5 @@
-import { and, eq, lt } from "drizzle-orm";
-import type { AriaDatabase } from "@aria/db";
+import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
+import type { AriaDatabase, DbOrTx } from "@aria/db";
 import { notifications, oauthCredentials, socialAccounts } from "@aria/db";
 import { decryptSecret, encryptSecret } from "@aria/db";
 import type { ProviderId } from "@aria/shared-types";
@@ -27,9 +27,12 @@ export class RefreshFailedError extends Error {
 
 /**
  * Single-flight token refresh (plan §27). Two layers:
- *  - an in-process map so threads in one worker serialize;
- *  - a Postgres advisory lock so multiple workers/processes serialize.
- * Losers re-read the freshly persisted credential instead of refreshing again.
+ *  - an in-process map so concurrent callers in one process serialize;
+ *  - a transaction-scoped Postgres advisory lock (see resolveAccessToken) so
+ *    the API and every worker serialize too. Transaction scope matters: with
+ *    a connection pool a session lock could be released on another connection.
+ * Losers re-read the freshly persisted credential instead of refreshing again,
+ * which is what keeps rotating refresh tokens (X, Bluesky) from being burned.
  */
 const inFlight = new Map<string, Promise<unknown>>();
 
@@ -52,7 +55,7 @@ export function withRefreshLock<T>(accountId: string, fn: () => Promise<T>): Pro
 const REFRESH_MARGIN_MS = 5 * 60_000;
 
 export async function loadDecryptedCredential(
-  db: AriaDatabase,
+  db: DbOrTx,
   accountId: string
 ): Promise<DecryptedCredential | null> {
   const rows = await db
@@ -76,7 +79,7 @@ export async function loadDecryptedCredential(
 }
 
 async function persistRefreshedCredential(
-  db: AriaDatabase,
+  db: DbOrTx,
   accountId: string,
   grant: { accessToken: string; refreshToken?: string; expiresInSeconds?: number; scopes?: string[] }
 ): Promise<DecryptedCredential> {
@@ -108,49 +111,86 @@ async function persistRefreshedCredential(
 
 /**
  * Returns a valid access token for the account, refreshing first when the
- * stored one is expired or expiring. Refresh failures flip the connection to
- * `needs_reauth` and raise a notification — scheduled content pauses safely
- * instead of failing mysteriously later.
+ * stored one is expired or expiring (within `marginMs`, default 5 minutes).
+ * Refresh failures flip the connection to `needs_reauth` and raise a
+ * notification — scheduled content pauses safely instead of failing
+ * mysteriously later.
  */
 export async function resolveAccessToken(
   db: AriaDatabase,
-  accountId: string
+  accountId: string,
+  options: { marginMs?: number } = {}
 ): Promise<DecryptedCredential> {
+  const marginMs = options.marginMs ?? REFRESH_MARGIN_MS;
   const cred = await loadDecryptedCredential(db, accountId);
   if (!cred) throw new RefreshFailedError("No stored credential for this account", accountId);
 
-  const needsRefresh =
-    !!cred.expiresAt && cred.expiresAt.getTime() - REFRESH_MARGIN_MS < Date.now();
-  if (!needsRefresh) return cred;
+  const expiring = (c: DecryptedCredential) => !!c.expiresAt && c.expiresAt.getTime() - marginMs < Date.now();
+  if (!expiring(cred)) return cred;
 
-  return withRefreshLock(accountId, async () => {
-    // Another caller may have refreshed while we waited on the lock.
-    const fresh = await loadDecryptedCredential(db, accountId);
-    if (!fresh) throw new RefreshFailedError("Credential disappeared during refresh", accountId);
-    if (!fresh.expiresAt || fresh.expiresAt.getTime() - REFRESH_MARGIN_MS >= Date.now()) {
-      return fresh;
-    }
-    if (!fresh.refreshToken) {
-      await markRefreshFailed(db, accountId, "The stored credential cannot be refreshed — reconnect the account.");
-      throw new RefreshFailedError("No refresh token available", accountId);
-    }
-    const account = (
-      await db.select().from(socialAccounts).where(eq(socialAccounts.id, accountId)).limit(1)
-    )[0];
+  type Outcome = { cred: DecryptedCredential } | { failed: string; message: string };
+  const outcome = await withRefreshLock(accountId, () =>
+    db.transaction(async (tx): Promise<Outcome> => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`aria-refresh:${accountId}`}))`);
+      // Another process may have refreshed while we waited on the lock.
+      const fresh = await loadDecryptedCredential(tx, accountId);
+      if (!fresh) return { failed: "The stored credential disappeared — reconnect the account.", message: "Credential disappeared during refresh" };
+      if (!expiring(fresh)) return { cred: fresh };
+      if (!fresh.refreshToken) {
+        return { failed: "The stored credential cannot be refreshed — reconnect the account.", message: "No refresh token available" };
+      }
+      const account = (await tx.select().from(socialAccounts).where(eq(socialAccounts.id, accountId)).limit(1))[0];
+      try {
+        const grant = await refreshAccessToken(account.providerId as ProviderId, fresh.refreshToken, {
+          instanceUrl: fresh.instanceUrl,
+          blueskyInstance: fresh.instanceUrl ?? DEFAULT_BLUESKY_INSTANCE,
+          facebookPageId: account.providerId === "facebook" ? account.externalAccountId : undefined,
+          db,
+        });
+        return { cred: await persistRefreshedCredential(tx, accountId, grant) };
+      } catch (err) {
+        const message = (err as Error).message ?? "Token refresh failed";
+        return { failed: `Automatic token refresh failed (${message}). Reconnect the account.`, message };
+      }
+    })
+  );
+  if ("failed" in outcome) {
+    // Recorded outside the transaction so the health flip and notification persist.
+    await markRefreshFailed(db, accountId, outcome.failed);
+    throw new RefreshFailedError(outcome.message, accountId);
+  }
+  return outcome.cred;
+}
+
+/**
+ * Connection monitor: refreshes tokens that expire within `withinMs` ahead of
+ * time, so a post scheduled for 3 a.m. never waits on a refresh. Returns how
+ * many were refreshed; failures are flagged by resolveAccessToken itself.
+ */
+export async function refreshExpiringTokens(db: AriaDatabase, withinMs = 24 * 3_600_000): Promise<number> {
+  const soon = new Date(Date.now() + withinMs);
+  const rows = await db
+    .select({ accountId: oauthCredentials.accountId })
+    .from(oauthCredentials)
+    .innerJoin(socialAccounts, eq(socialAccounts.id, oauthCredentials.accountId))
+    .where(
+      and(
+        lt(oauthCredentials.expiresAt, soon),
+        isNotNull(oauthCredentials.refreshTokenEnc),
+        // Accounts already flagged for reconnection would only fail again.
+        sql`${socialAccounts.connection} not in ('needs_reauth', 'disconnected')`
+      )
+    );
+  let refreshed = 0;
+  for (const r of rows) {
     try {
-      const grant = await refreshAccessToken(account.providerId as ProviderId, fresh.refreshToken, {
-        instanceUrl: fresh.instanceUrl,
-        blueskyInstance: fresh.instanceUrl ?? DEFAULT_BLUESKY_INSTANCE,
-        facebookPageId: account.providerId === "facebook" ? account.externalAccountId : undefined,
-        db,
-      });
-      return await persistRefreshedCredential(db, accountId, grant);
-    } catch (err) {
-      const message = (err as Error).message ?? "Token refresh failed";
-      await markRefreshFailed(db, accountId, `Automatic token refresh failed (${message}). Reconnect the account.`);
-      throw new RefreshFailedError(message, accountId);
+      await resolveAccessToken(db, r.accountId, { marginMs: withinMs });
+      refreshed += 1;
+    } catch {
+      /* markRefreshFailed already notified the workspace */
     }
-  });
+  }
+  return refreshed;
 }
 
 async function markRefreshFailed(db: AriaDatabase, accountId: string, note: string): Promise<void> {
@@ -172,7 +212,11 @@ async function markRefreshFailed(db: AriaDatabase, accountId: string, note: stri
   });
 }
 
-/** Flips accounts whose tokens expire soon to `token_expiring` (health signal). */
+/**
+ * Flips accounts whose tokens expire soon and CANNOT refresh themselves to
+ * `token_expiring`, so users reconnect before schedules break. Tokens with a
+ * refresh token are renewed by refreshExpiringTokens instead.
+ */
 export async function flagExpiringTokens(
   db: AriaDatabase,
   withinMs = 7 * 86_400_000
@@ -181,7 +225,7 @@ export async function flagExpiringTokens(
   const rows = await db
     .select({ accountId: oauthCredentials.accountId })
     .from(oauthCredentials)
-    .where(lt(oauthCredentials.expiresAt, soon));
+    .where(and(lt(oauthCredentials.expiresAt, soon), sql`${oauthCredentials.refreshTokenEnc} is null`));
   let flipped = 0;
   for (const r of rows) {
     const account = (
@@ -192,7 +236,7 @@ export async function flagExpiringTokens(
         .update(socialAccounts)
         .set({
           connection: "token_expiring",
-          connectionNote: "Access token expires soon. It will refresh automatically.",
+          connectionNote: "Access expires soon and can't renew itself. Reconnect the account to keep scheduled posts running.",
         })
         .where(eq(socialAccounts.id, r.accountId));
       flipped += 1;

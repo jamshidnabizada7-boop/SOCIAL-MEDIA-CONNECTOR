@@ -23,6 +23,11 @@ export interface AdapterMedia {
   durationSec?: number;
   /** Set by the engine from uploadMedia() results. */
   remoteMediaId?: string;
+  /**
+   * Expiring, signed https URL the provider can fetch (Instagram/Threads
+   * containers). Set by the engine when the API has a public https origin.
+   */
+  publicUrl?: string;
 }
 
 export interface AdapterPublishInput {

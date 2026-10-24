@@ -1,3 +1,4 @@
+import { graphBase } from "./config.js";
 import { fetchJson, type FetchLike } from "./http.js";
 import type { ProviderId } from "@aria/shared-types";
 import { mastodonVerifyCredentials } from "./mastodon.js";
@@ -40,7 +41,7 @@ export async function fetchProfile(
         data: Array<{ id: string; name: string; access_token?: string; fan_count?: number; followers_count?: number }>;
       }>(
         "Facebook",
-        "https://graph.facebook.com/v23.0/me/accounts?fields=id,name,access_token,fan_count,followers_count&limit=20",
+        `${graphBase()}/me/accounts?fields=id,name,access_token,fan_count,followers_count&limit=100`,
         { headers: { Authorization: `Bearer ${accessToken}` }, fetchImpl: opts?.fetchImpl }
       );
       const pages = res.data ?? [];
@@ -66,13 +67,40 @@ export async function fetchProfile(
       };
     }
     case "instagram": {
-      const res = await fetchJson<{ user_id?: string; id?: string; username?: string }>(
+      // Instagram professional accounts are reached through the Facebook
+      // Pages they're linked to; the Page token publishes for the IG account.
+      const res = await fetchJson<{
+        data: Array<{
+          id: string;
+          access_token?: string;
+          instagram_business_account?: { id: string; username?: string; name?: string; followers_count?: number };
+        }>;
+      }>(
         "Instagram",
-        "https://graph.facebook.com/v23.0/me?fields=user_id,username",
+        `${graphBase()}/me/accounts?fields=id,access_token,instagram_business_account{id,username,name,followers_count}&limit=100`,
         { headers: { Authorization: `Bearer ${accessToken}` }, fetchImpl: opts?.fetchImpl }
       );
-      const id = res.user_id ?? res.id ?? "";
-      return { externalAccountId: id, displayName: res.username ?? "Instagram account", handle: `@${res.username ?? id}` };
+      const linked = (res.data ?? []).filter((p) => p.instagram_business_account?.id);
+      if (linked.length === 0) {
+        throw Object.assign(
+          new Error(
+            "No Instagram professional account is linked to a Facebook Page you manage. Switch the Instagram account to Business or Creator and link it to a Page."
+          ),
+          { code: "no_instagram_business" }
+        );
+      }
+      const toProfile = (p: (typeof linked)[number]) => {
+        const ig = p.instagram_business_account!;
+        return {
+          externalAccountId: ig.id,
+          displayName: ig.name ?? ig.username ?? "Instagram account",
+          handle: `@${ig.username ?? ig.id}`,
+          followers: ig.followers_count ?? null,
+          accessToken: p.access_token,
+        };
+      };
+      const [first, ...rest] = linked.map(toProfile);
+      return { ...first, extra: rest };
     }
     case "threads": {
       const res = await fetchJson<{ id: string; username: string }>(

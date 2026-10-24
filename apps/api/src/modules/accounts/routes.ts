@@ -7,6 +7,7 @@ import {
 } from "@aria/db";
 import {
   flagExpiringTokens,
+  pinterestListBoards,
   resolveAccessToken,
   RefreshFailedError,
 } from "@aria/providers-core";
@@ -90,6 +91,36 @@ export function registerAccountRoutes(app: FastifyInstance): void {
           });
         }
         throw err;
+      }
+    }
+  );
+
+  /** Boards of a connected Pinterest account, for the composer's board picker. */
+  app.get(
+    "/v1/workspaces/:workspaceId/accounts/:accountId/pinterest/boards",
+    { preHandler: requireWorkspacePermission(app, "create_posts") },
+    async (req, reply) => {
+      const { workspaceId, accountId } = req.params as { workspaceId: string; accountId: string };
+      const account = (
+        await db
+          .select()
+          .from(socialAccounts)
+          .where(and(eq(socialAccounts.id, accountId), eq(socialAccounts.workspaceId, workspaceId)))
+          .limit(1)
+      )[0];
+      if (!account || account.providerId !== "pinterest") {
+        return reply.status(404).send({ error: { code: "not_found", message: "Pinterest account not found." } });
+      }
+      try {
+        const cred = await resolveAccessToken(db, accountId);
+        const boards = await pinterestListBoards(cred.accessToken);
+        return reply.send({ boards: boards.map((b) => ({ id: b.id, name: b.name })) });
+      } catch (err) {
+        if (err instanceof RefreshFailedError) {
+          return reply.status(409).send({ error: { code: "refresh_failed", message: "Reconnect this Pinterest account to load its boards." } });
+        }
+        req.log.warn({ status: (err as { status?: number }).status }, "pinterest boards fetch failed");
+        return reply.status(502).send({ error: { code: "provider_error", message: "Pinterest didn't return the boards. Try again in a moment." } });
       }
     }
   );

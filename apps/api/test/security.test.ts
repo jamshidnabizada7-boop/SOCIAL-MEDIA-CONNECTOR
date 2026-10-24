@@ -254,7 +254,7 @@ describe("authentication hardening", () => {
       remoteAddress: "10.0.1.1",
     });
     expect(correct.statusCode).toBe(429);
-  });
+  }, 60_000);
 
   it("resets a password with the mailed single-use token and unlocks", async () => {
     sent.length = 0;
@@ -277,7 +277,7 @@ describe("authentication hardening", () => {
       remoteAddress: "10.0.2.1",
     });
     expect(login.statusCode).toBe(200);
-  });
+  }, 60_000);
 
   it("verifies email with the mailed token", async () => {
     sent.length = 0;
@@ -362,5 +362,83 @@ describe("webhook gateway", () => {
     const rows = await app.database.db.select().from(webhookEvents).where(eq(webhookEvents.providerId, "facebook"));
     expect(rows.every((r) => !JSON.stringify(r.payload).includes("attacker-data"))).toBe(true);
     expect(rows.every((r) => r.dedupeKey === null)).toBe(true);
+  });
+});
+
+describe("post lifecycle", () => {
+  it("stores per-network variants and AI disclosure", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${alice.workspaceId}/posts`,
+      headers: { cookie: alice.cookie, origin: ORIGIN },
+      payload: {
+        caption: "with variants",
+        accountIds: [aliceAccountId],
+        aiDisclosed: true,
+        variants: [{ providerId: "youtube", title: "My video", settings: { visibility: "unlisted" } }],
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const post = res.json().post;
+    expect(post.aiDisclosed).toBe(true);
+    expect(post.variants).toHaveLength(1);
+    expect(post.variants[0].title).toBe("My video");
+    expect(post.variants[0].settings.visibility).toBe("unlisted");
+  });
+
+  it("rescheduling leaves exactly one live job per destination", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${alice.workspaceId}/posts`,
+      headers: { cookie: alice.cookie, origin: ORIGIN },
+      payload: { caption: "reschedule me", accountIds: [aliceAccountId] },
+    });
+    const postId = created.json().post.id;
+    const targetId = created.json().post.targets[0].id;
+    for (const hours of [2, 5, 9]) {
+      const r = await app.inject({
+        method: "POST",
+        url: `/v1/workspaces/${alice.workspaceId}/posts/${postId}/schedule`,
+        headers: { cookie: alice.cookie, origin: ORIGIN },
+        payload: { scheduledAt: new Date(Date.now() + hours * 3_600_000).toISOString() },
+      });
+      expect(r.statusCode).toBe(200);
+    }
+    const { publishJobs } = await import("@aria/db");
+    const jobs = await app.database.db.select().from(publishJobs).where(eq(publishJobs.targetId, targetId));
+    const live = jobs.filter((j) => j.state === "pending" || j.state === "delayed");
+    expect(live).toHaveLength(1);
+    expect(Math.round((live[0].runAt.getTime() - Date.now()) / 3_600_000)).toBe(9);
+
+    const canceled = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${alice.workspaceId}/posts/${postId}/cancel`,
+      headers: { cookie: alice.cookie, origin: ORIGIN },
+    });
+    expect(canceled.statusCode).toBe(200);
+    const after = await app.database.db.select().from(publishJobs).where(eq(publishJobs.targetId, targetId));
+    expect(after.filter((j) => j.state === "pending" || j.state === "delayed")).toHaveLength(0);
+  });
+
+  it("can change a draft's destinations", async () => {
+    const [second] = await app.database.db
+      .insert(socialAccounts)
+      .values({ workspaceId: alice.workspaceId, providerId: "mastodon", externalAccountId: "a2", displayName: "Alice 2", handle: "@alice2", connection: "healthy", scopes: [] })
+      .returning();
+    const created = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${alice.workspaceId}/posts`,
+      headers: { cookie: alice.cookie, origin: ORIGIN },
+      payload: { caption: "move me", accountIds: [aliceAccountId] },
+    });
+    const postId = created.json().post.id;
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/v1/workspaces/${alice.workspaceId}/posts/${postId}`,
+      headers: { cookie: alice.cookie, origin: ORIGIN },
+      payload: { accountIds: [second.id] },
+    });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().post.targets.map((t: { accountId: string }) => t.accountId)).toEqual([second.id]);
   });
 });

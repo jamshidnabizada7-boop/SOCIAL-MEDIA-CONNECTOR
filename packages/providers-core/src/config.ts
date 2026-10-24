@@ -10,6 +10,14 @@ export interface ProviderOAuthConfig {
   usePkce: boolean;
   /** Extra authorize params (e.g. YouTube's access_type=offline). */
   extraAuthorizeParams?: Record<string, string>;
+  /**
+   * How the client authenticates at the token endpoint:
+   *  - "body": client_id + client_secret form fields (Google, LinkedIn, Meta)
+   *  - "basic": HTTP Basic header (Pinterest; X confidential clients)
+   */
+  clientAuth?: "body" | "basic";
+  /** Name of the client id parameter — TikTok calls it client_key. */
+  clientIdParam?: string;
   /** Env keys that must be present to enable this provider's real OAuth. */
   requiredEnv: [string, string][];
   /** Profile fetcher kind — implemented in profile.ts. */
@@ -26,7 +34,18 @@ export interface ProviderOAuthConfig {
   verified: boolean;
 }
 
-const GRAPH = "https://graph.facebook.com/v23.0";
+/**
+ * Graph API version. Meta supports each version for ~2 years; bump
+ * META_GRAPH_VERSION (e.g. "v25.0") after checking the changelog, no deploy of
+ * code needed.
+ */
+export function metaGraphVersion(): string {
+  return process.env.META_GRAPH_VERSION?.trim() || "v23.0";
+}
+
+export function graphBase(): string {
+  return `https://graph.facebook.com/${metaGraphVersion()}`;
+}
 
 /**
  * OAuth endpoints per provider. Facebook/Instagram/Threads/LinkedIn verified
@@ -36,8 +55,10 @@ const GRAPH = "https://graph.facebook.com/v23.0";
 export const PROVIDER_OAUTH: Partial<Record<ProviderId, ProviderOAuthConfig>> = {
   facebook: {
     id: "facebook",
-    authorizeUrl: () => `https://www.facebook.com/v23.0/dialog/oauth`,
-    tokenUrl: `${GRAPH}/oauth/access_token`,
+    authorizeUrl: () => `https://www.facebook.com/${metaGraphVersion()}/dialog/oauth`,
+    get tokenUrl() {
+      return `${graphBase()}/oauth/access_token`;
+    },
     // publish_video retired by Meta (now "Live Video API"); pages_manage_posts covers video posts.
     scopes: ["pages_show_list", "pages_manage_posts", "pages_manage_engagement", "pages_read_engagement"],
     usePkce: false,
@@ -47,8 +68,10 @@ export const PROVIDER_OAUTH: Partial<Record<ProviderId, ProviderOAuthConfig>> = 
   },
   instagram: {
     id: "instagram",
-    authorizeUrl: () => `https://www.facebook.com/v23.0/dialog/oauth`,
-    tokenUrl: `${GRAPH}/oauth/access_token`,
+    authorizeUrl: () => `https://www.facebook.com/${metaGraphVersion()}/dialog/oauth`,
+    get tokenUrl() {
+      return `${graphBase()}/oauth/access_token`;
+    },
     scopes: ["instagram_basic", "instagram_content_publish", "pages_show_list", "pages_read_engagement"],
     usePkce: false,
     requiredEnv: [["FACEBOOK_APP_ID", "FACEBOOK_APP_SECRET"]],
@@ -81,6 +104,7 @@ export const PROVIDER_OAUTH: Partial<Record<ProviderId, ProviderOAuthConfig>> = 
     tokenUrl: `https://open.tiktokapis.com/v2/oauth/token/`,
     scopes: ["user.info.basic", "video.upload", "video.publish"],
     usePkce: true,
+    clientIdParam: "client_key",
     requiredEnv: [["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"]],
     profileKind: "tiktok_user",
     verified: true,
@@ -102,6 +126,8 @@ export const PROVIDER_OAUTH: Partial<Record<ProviderId, ProviderOAuthConfig>> = 
     tokenUrl: `https://api.x.com/2/oauth2/token`,
     scopes: ["tweet.read", "tweet.write", "users.read", "offline.access"],
     usePkce: true,
+    // Confidential client (we hold a secret): X requires Basic auth.
+    clientAuth: "basic",
     requiredEnv: [["X_CLIENT_ID", "X_CLIENT_SECRET"]],
     profileKind: "x_me",
     verified: false,
@@ -112,6 +138,7 @@ export const PROVIDER_OAUTH: Partial<Record<ProviderId, ProviderOAuthConfig>> = 
     tokenUrl: `https://api.pinterest.com/v5/oauth/token`,
     scopes: ["user_accounts:read", "boards:read", "pins:read", "pins:write"],
     usePkce: false,
+    clientAuth: "basic",
     requiredEnv: [["PINTEREST_APP_ID", "PINTEREST_APP_SECRET"]],
     profileKind: "pinterest_me",
     verified: false,

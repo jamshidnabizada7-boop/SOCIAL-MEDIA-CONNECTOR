@@ -86,6 +86,8 @@ export interface User {
   avatarHue: number;
   role: Role;
   isAdmin?: boolean;
+  /** API mode: whether the account's email address has been confirmed. */
+  emailVerified?: boolean;
   lastActiveAt: string;
   status: "active" | "invited" | "suspended";
 }

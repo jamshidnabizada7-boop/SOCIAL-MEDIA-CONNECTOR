@@ -73,7 +73,7 @@ const SessionContext = createContext<{
   signOut: () => void;
   setWorkspace: (id: string) => void;
   setBrand: (id: string | null) => void;
-  refresh: () => void;
+  refresh: () => Promise<void>;
 }>({
   session: null,
   ready: false,
@@ -82,7 +82,7 @@ const SessionContext = createContext<{
   signOut: () => {},
   setWorkspace: () => {},
   setBrand: () => {},
-  refresh: () => {},
+  refresh: async () => {},
 });
 
 export function useSession() {
@@ -133,7 +133,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   const buildApiSession = useCallback(async (): Promise<Session | null> => {
     try {
-      const me = await sessionApi.me();
+      let me = await sessionApi.me();
+      if (me.workspaces.length === 0) {
+        // First sign-in (or the last workspace was deleted): every account
+        // needs a home. Onboarding renames it.
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        await sessionApi.createWorkspace(`${me.user.name.split(" ")[0] || "My"}'s workspace`, tz);
+        me = await sessionApi.me();
+      }
       const wsSummaries: ApiWorkspaceSummary[] = me.workspaces;
       if (wsSummaries.length === 0) return null;
       const preferred = localStorage.getItem('aria-workspace');
@@ -157,6 +164,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
         avatarHue: me.user.avatarHue ?? 200,
         role: (wsSummaries.find((w) => w.workspaceId === workspace.id)?.role as User['role']) ?? 'owner',
         isAdmin: me.user.isPlatformAdmin,
+        emailVerified: me.user.emailVerified ?? true,
         lastActiveAt: new Date().toISOString(),
         status: 'active',
       };
@@ -201,9 +209,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
     if (DATA_MODE === 'api') {
-      void buildApiSession().then(setSession);
+      setSession(await buildApiSession());
     } else {
       setSession(readSession());
     }
@@ -247,7 +255,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     (id: string) => {
       localStorage.setItem('aria-workspace', id);
       localStorage.removeItem('aria-brand');
-      refresh();
+      void refresh();
     },
     [refresh]
   );
@@ -256,7 +264,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     (id: string | null) => {
       if (id) localStorage.setItem('aria-brand', id);
       else localStorage.removeItem('aria-brand');
-      refresh();
+      void refresh();
     },
     [refresh]
   );

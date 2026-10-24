@@ -46,7 +46,8 @@ export interface PostsService {
   /** Fetch a single post (with detail) — same as get() in the mock. */
   getAsync(id: string): Promise<Post | undefined>;
   createDraft(input: NewPostInput): Promise<Post>;
-  updateDraft(id: string, patch: Partial<Post>): Promise<Post>;
+  /** `selectedAccountIds` replaces the destinations of a draft or scheduled post. */
+  updateDraft(id: string, patch: Partial<Post> & { selectedAccountIds?: string[] }): Promise<Post>;
   deletePost(id: string): Promise<void>;
   duplicate(id: string): Promise<Post>;
   publish(id: string): Promise<void>;

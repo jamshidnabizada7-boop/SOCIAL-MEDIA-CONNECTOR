@@ -47,7 +47,7 @@ describe("OAuth primitives", () => {
     process.env.TIKTOK_CLIENT_SECRET = "test-secret";
     const { url, codeVerifier } = await buildAuthorizeUrl("tiktok");
     expect(url).toContain("code_challenge_method=S256");
-    expect(url).toContain("client_id=test-key");
+    expect(url).toContain("client_key=test-key");
     expect(codeVerifier).toBeTruthy();
     delete process.env.TIKTOK_CLIENT_KEY;
     delete process.env.TIKTOK_CLIENT_SECRET;
