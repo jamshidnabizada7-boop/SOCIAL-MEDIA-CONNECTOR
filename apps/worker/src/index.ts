@@ -9,7 +9,6 @@ import { openDatabase, processPublishJob, processReconcileJob } from "./pipeline
 import { claimJobs, heartbeat, jobOutcome, LEASE_MS, type ClaimedJob } from "./pipeline/jobs.js";
 
 const logger = pino({ level: workerConfig.LOG_LEVEL, base: { service: "aria-worker" } });
-const log = (msg: string, meta?: Record<string, unknown>) => logger.info(meta ?? {}, msg);
 
 const WORKER_ID = `${hostname()}:${process.pid}:${randomBytes(3).toString("hex")}`;
 const IDLE_POLL_MS = 2_000;
