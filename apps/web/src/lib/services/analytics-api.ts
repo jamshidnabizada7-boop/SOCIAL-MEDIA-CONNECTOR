@@ -15,7 +15,7 @@ interface ApiOverview {
   mode: "live";
   overview: { impressions: number | null; engagements: number | null; followers: number; clicks: number | null };
   deltas: { impressions: number | null; engagements: number | null; followers: number | null; clicks: number | null };
-  series: { date: string; published: number }[];
+  series: { date: string; published: number; engagements: number | null }[];
   byNetwork: Array<{
     provider: string;
     accountName: string;
@@ -45,11 +45,13 @@ export class ApiAnalyticsService {
     const data = await apiGet<ApiOverview>(`/v1/workspaces/current/analytics/overview?range=${range}`);
     const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
     // Fill the series to cover the full range so the chart x-axis is honest.
-    const byDate = new Map(data.series.map((p) => [p.date, p.published]));
+    // Live mode: `impressions` carries posts published per day (the page labels it so).
+    const byDate = new Map(data.series.map((p) => [p.date, p]));
     const series: { date: string; impressions: number; engagements: number }[] = [];
     for (let i = days - 1; i >= 0; i--) {
       const date = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
-      series.push({ date, impressions: byDate.get(date) ?? 0, engagements: 0 });
+      const point = byDate.get(date);
+      series.push({ date, impressions: point?.published ?? 0, engagements: point?.engagements ?? 0 });
     }
     return {
       mode: "live",
@@ -64,6 +66,7 @@ export class ApiAnalyticsService {
       byNetwork: data.byNetwork.map((n) => ({
         provider: n.provider as AnalyticsSeed["byNetwork"][number]["provider"],
         accountName: n.accountName,
+        published: n.published,
         metrics: {
           impressions: n.impressions,
           engagements: n.engagements,

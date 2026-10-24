@@ -96,7 +96,7 @@ export function ConfirmDialog({
   onClose: () => void;
   onConfirm: () => void;
   title: string;
-  body: string;
+  body: ReactNode;
   confirmLabel?: string;
   danger?: boolean;
   loading?: boolean;
@@ -118,7 +118,11 @@ export function ConfirmDialog({
         </>
       }
     >
-      <p className="text-sm leading-relaxed text-ink-2">{body}</p>
+      {typeof body === "string" ? (
+        <p className="text-sm leading-relaxed text-ink-2">{body}</p>
+      ) : (
+        <div className="text-sm leading-relaxed text-ink-2">{body}</div>
+      )}
     </Dialog>
   );
 }

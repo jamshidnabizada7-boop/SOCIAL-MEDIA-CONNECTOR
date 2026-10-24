@@ -1,14 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/primitives";
 import { useSession, useToast } from "@/components/providers";
 
-export default function SignUpPage() {
+/** Only same-site relative paths are honored as post-auth destinations. */
+function safeNext(value: string | null): string | null {
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : null;
+}
+
+function SignUpForm() {
   const router = useRouter();
+  const nextPath = safeNext(useSearchParams().get("next"));
   const { session, signUp } = useSession();
   const toast = useToast();
   const [name, setName] = useState("");
@@ -18,8 +24,8 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (session) router.replace("/dashboard");
-  }, [session, router]);
+    if (session) router.replace(nextPath ?? "/dashboard");
+  }, [session, router, nextPath]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +44,7 @@ export default function SignUpPage() {
       return;
     }
     toast({ title: "Account created", description: "Let's set up your workspace.", variant: "success" });
-    router.push("/onboarding");
+    router.push(nextPath ?? "/onboarding");
   };
 
   return (
@@ -99,10 +105,18 @@ export default function SignUpPage() {
 
       <p className="mt-8 text-center text-sm text-ink-2">
         Already have an account?{" "}
-        <Link href="/signin" className="font-semibold text-accent-ink hover:underline">
+        <Link href={nextPath ? `/signin?next=${encodeURIComponent(nextPath)}` : "/signin"} className="font-semibold text-accent-ink hover:underline">
           Sign in
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignUpForm />
+    </Suspense>
   );
 }

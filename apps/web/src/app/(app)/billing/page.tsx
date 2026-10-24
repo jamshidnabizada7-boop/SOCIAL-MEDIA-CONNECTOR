@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CreditCard, Download, Sparkles } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { CreditCard, Download } from "lucide-react";
 import type { Invoice, Subscription, Usage } from "@/lib/types";
 import { PLAN_OFFERS, workspaceService } from "@/lib/services/workspace";
 import { useSubscribe } from "@/lib/services/hooks";
@@ -12,33 +13,64 @@ import { Card, CardHeader, Meter, Skeleton } from "@/components/ui/primitives";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { cn, formatDate } from "@/lib/utils";
 import { DATA_MODE } from "@/lib/api/client";
-import { fetchWorkspaceBilling, postPlanChange } from "@/lib/services/billing-api";
+import {
+  downgradeToFree,
+  fetchWorkspaceBilling,
+  openBillingPortal,
+  startCheckout,
+  type WorkspaceBilling,
+} from "@/lib/services/billing-api";
 
-export default function BillingPage() {
+const PLAN_ORDER = ["free", "creator", "pro", "agency"];
+
+function BillingInner() {
   useSubscribe(workspaceService);
-  const { session } = useSession();
+  const { session, refresh } = useSession();
   const toast = useToast();
+  const params = useSearchParams();
   const [loaded, setLoaded] = useState(false);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoices, setInvoices] = useState<Array<Invoice & { url?: string }>>([]);
   const [targetPlan, setTargetPlan] = useState<string | null>(null);
-  // API mode: real billing from entitlement tables.
-  const [apiBilling, setApiBilling] = useState<{ subscription: Subscription; usage: Usage } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [apiBilling, setApiBilling] = useState<WorkspaceBilling | null>(null);
+
+  const workspace = session?.workspace;
+  const load = useCallback(async () => {
+    if (!workspace) return;
+    try {
+      const billing = await fetchWorkspaceBilling(workspace);
+      setApiBilling(billing);
+      setInvoices(billing.invoices);
+    } catch (err) {
+      toast({ title: "Couldn't load billing", description: (err as Error).message, variant: "error" });
+    } finally {
+      setLoaded(true);
+    }
+  }, [workspace, toast]);
 
   useEffect(() => {
     if (DATA_MODE === "api") {
-      const load = async () => {
-        if (!session?.workspace) return;
-        const billing = await fetchWorkspaceBilling(session.workspace);
-        setApiBilling(billing);
-        setInvoices(billing.invoices);
-        setLoaded(true);
-      };
       void load();
       return;
     }
     setInvoices(workspaceService.invoices());
     setLoaded(true);
-  }, [session]);
+  }, [load]);
+
+  // Returning from Stripe Checkout: the webhook may land a moment later.
+  useEffect(() => {
+    const outcome = params.get("checkout");
+    if (DATA_MODE !== "api" || !outcome) return;
+    if (outcome === "success") {
+      toast({ title: "Payment received", description: "Your plan updates as soon as Stripe confirms — usually within seconds.", variant: "success" });
+      const t = window.setTimeout(() => {
+        void load();
+        void refresh();
+      }, 4000);
+      return () => window.clearTimeout(t);
+    }
+    toast({ title: "Checkout canceled", description: "Nothing was charged.", variant: "info" });
+  }, [params, load, refresh, toast]);
 
   if (!loaded || !session) {
     return (
@@ -52,49 +84,113 @@ export default function BillingPage() {
     );
   }
 
-  const sub = apiBilling?.subscription ?? workspaceService.subscription();
-  const usage = apiBilling?.usage ?? workspaceService.usage();
-  const isDowngrade = (planId: string) => {
-    const order = ["free", "creator", "pro", "agency"];
-    return order.indexOf(planId) < order.indexOf(sub.plan.id);
+  const sub: Subscription = apiBilling?.subscription ?? workspaceService.subscription();
+  const usage: Usage = apiBilling?.usage ?? workspaceService.usage();
+  const isDowngrade = (planId: string) => PLAN_ORDER.indexOf(planId) < PLAN_ORDER.indexOf(sub.plan.id);
+  const api = DATA_MODE === "api";
+  const canBuy = (planId: string) => !api || planId === "free" || !!apiBilling?.purchasable.has(planId);
+
+  const portal = async () => {
+    if (!api) {
+      toast({ title: "Opening the customer portal…", description: "Payments are disabled in this prototype.", variant: "info" });
+      return;
+    }
+    setBusy(true);
+    try {
+      window.location.assign(await openBillingPortal());
+    } catch (err) {
+      setBusy(false);
+      toast({ title: "Couldn't open billing", description: (err as Error).message, variant: "error" });
+    }
   };
+
+  const changePlan = async (planId: string) => {
+    const plan = PLAN_OFFERS.find((p) => p.id === planId);
+    if (!plan) return;
+    if (!api) {
+      await workspaceService.changePlan(plan);
+      toast({ title: `Plan changed to ${plan.name}`, variant: "success" });
+      return;
+    }
+    setBusy(true);
+    try {
+      if (planId === "free") {
+        await downgradeToFree();
+        toast({
+          title: "Downgrade scheduled",
+          description: apiBilling?.periodEnd
+            ? `You keep ${sub.plan.name} until ${formatDate(apiBilling.periodEnd, { month: "long", day: "numeric" })}.`
+            : "You're on the Free plan now.",
+          variant: "success",
+        });
+      } else {
+        const res = await startCheckout(planId);
+        if (res.url) {
+          window.location.assign(res.url);
+          return;
+        }
+        toast({ title: `Switched to ${plan.name}`, description: "The difference is prorated on your next invoice.", variant: "success" });
+      }
+      await load();
+      await refresh();
+    } catch (err) {
+      toast({ title: "Couldn't change the plan", description: (err as Error).message, variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const renewLabel = api
+    ? apiBilling?.periodEnd
+      ? `${apiBilling.cancelAtPeriodEnd ? "Ends" : "Renews"} ${formatDate(apiBilling.periodEnd, { month: "long", day: "numeric", year: "numeric" })}`
+      : sub.plan.id === "free"
+        ? "Free forever"
+        : "Active"
+    : `Renews ${formatDate(sub.renewsAt, { month: "long", day: "numeric", year: "numeric" })}`;
 
   return (
     <div>
-      <PageHeader
-        title="Billing"
-        description="Plans are enforced by entitlements in the backend — the UI reflects what the server allows, never the other way round."
-      />
+      <PageHeader title="Billing" description="Your plan, usage and invoices. Limits are enforced by the server." />
       <PageBody className="space-y-5">
-        {/* Current plan + usage */}
+        {api && apiBilling?.status === "past_due" && (
+          <div role="alert" className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger-ink">
+            Your last payment failed. Update the payment method to keep your plan.
+          </div>
+        )}
+        {api && apiBilling && !apiBilling.billingEnabled && (
+          <div className="rounded-xl border bg-surface-2 px-4 py-3 text-sm text-ink-2">
+            Paid plans aren&apos;t available on this server yet. Everything on the Free plan works as usual.
+          </div>
+        )}
+
         <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
           <Card>
             <CardHeader
               title="Current plan"
-              description={`Renews ${formatDate(sub.renewsAt, { month: "long", day: "numeric", year: "numeric" })}`}
+              description={renewLabel}
               actions={<span className="rounded-full bg-accent-soft px-2.5 py-1 text-[12px] font-semibold text-accent-ink">{sub.plan.name}</span>}
             />
             <div className="p-5">
               <p className="flex items-baseline gap-1.5">
                 <span className="font-display text-4xl font-bold tracking-tight">${sub.plan.priceMonthly}</span>
-                <span className="text-sm text-ink-3">/ month · {sub.seats} seats</span>
+                <span className="text-sm text-ink-3">/ month</span>
               </p>
-              <div className="mt-4 flex items-center justify-between rounded-lg border bg-surface-2 p-3">
-                <span className="flex items-center gap-2 text-[13px]">
-                  <CreditCard className="size-4 text-ink-3" />
-                  {sub.paymentBrand} ending in {sub.paymentLast4}
-                </span>
-                <button onClick={() => toast({ title: "Card management opens Stripe in production", variant: "info" })} className="text-[13px] font-medium text-accent-ink hover:underline">
-                  Update
-                </button>
-              </div>
-              <Button
-                variant="secondary"
-                className="mt-4 w-full"
-                onClick={() => toast({ title: "Opening the customer portal…", description: "Payments are disabled in this prototype.", variant: "info" })}
-              >
-                Manage payment & invoices
-              </Button>
+              {(!api || apiBilling?.hasPaymentMethod) && (
+                <>
+                  <div className="mt-4 flex items-center justify-between rounded-lg border bg-surface-2 p-3">
+                    <span className="flex items-center gap-2 text-[13px]">
+                      <CreditCard className="size-4 text-ink-3" />
+                      {sub.paymentLast4 ? `${sub.paymentBrand} ending in ${sub.paymentLast4}` : "Payment method on file with Stripe"}
+                    </span>
+                    <button onClick={portal} className="text-[13px] font-medium text-accent-ink hover:underline">
+                      Update
+                    </button>
+                  </div>
+                  <Button variant="secondary" className="mt-4 w-full" onClick={portal} loading={busy}>
+                    Manage payment & invoices
+                  </Button>
+                </>
+              )}
             </div>
           </Card>
 
@@ -102,21 +198,19 @@ export default function BillingPage() {
             <CardHeader title="Usage this cycle" description="Entitlements from your plan." />
             <div className="grid gap-4 p-5 sm:grid-cols-2">
               <Meter label="Connected channels" used={usage.channels.used} limit={usage.channels.limit} />
-              <Meter label="Team members" used={usage.members.used} limit={usage.members.limit} />
-              <Meter label="Brands" used={usage.brands.used} limit={usage.brands.limit} />
+              <Meter label="Team seats" used={usage.members.used} limit={usage.members.limit} />
               <Meter label="Media storage (GB)" used={usage.storage.usedGb} limit={usage.storage.limitGb} />
-              <Meter label="AI credits" used={usage.aiCredits.used} limit={usage.aiCredits.limit} />
-              <Meter label="Scheduled posts" used={usage.scheduledPosts.used} limit={usage.scheduledPosts.limit} />
+              <Meter label="Scheduled posts this month" used={usage.scheduledPosts.used} limit={usage.scheduledPosts.limit} />
             </div>
           </Card>
         </div>
 
-        {/* Plans */}
         <Card>
-          <CardHeader title="Plans" description="Change anytime — upgrades apply immediately, downgrades at the end of the cycle." />
+          <CardHeader title="Plans" description="Upgrades apply immediately (prorated). Downgrades take effect at the end of the billing period." />
           <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-4">
             {PLAN_OFFERS.map((plan) => {
               const current = plan.id === sub.plan.id;
+              const available = canBuy(plan.id);
               return (
                 <div key={plan.id} className={cn("flex flex-col rounded-xl border p-4", current ? "border-accent ring-1 ring-accent/25" : "")}>
                   <div className="flex items-center justify-between">
@@ -138,10 +232,10 @@ export default function BillingPage() {
                   <Button
                     className="mt-4"
                     variant={current ? "secondary" : isDowngrade(plan.id) ? "ghost" : "soft"}
-                    disabled={current}
+                    disabled={current || !available || busy || (api && apiBilling?.cancelAtPeriodEnd && plan.id === "free")}
                     onClick={() => setTargetPlan(plan.id)}
                   >
-                    {current ? "Your plan" : isDowngrade(plan.id) ? "Downgrade" : "Upgrade"}
+                    {current ? "Your plan" : !available ? "Not available" : isDowngrade(plan.id) ? "Downgrade" : "Upgrade"}
                   </Button>
                 </div>
               );
@@ -149,43 +243,55 @@ export default function BillingPage() {
           </div>
         </Card>
 
-        {/* Invoices */}
         <Card>
           <CardHeader title="Invoices" description="Receipts for every billing period." />
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-[12px] text-ink-3">
-                  <th className="px-5 py-2.5 font-medium">Invoice</th>
-                  <th className="px-5 py-2.5 font-medium">Date</th>
-                  <th className="px-5 py-2.5 font-medium">Plan</th>
-                  <th className="px-5 py-2.5 font-medium">Amount</th>
-                  <th className="px-5 py-2.5 font-medium">Status</th>
-                  <th className="px-5 py-2.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((inv) => (
-                  <tr key={inv.id} className="border-b last:border-b-0">
-                    <td className="tnum px-5 py-3 font-medium">{inv.number}</td>
-                    <td className="tnum px-5 py-3 text-ink-2">{formatDate(inv.date, { month: "short", day: "numeric", year: "numeric" })}</td>
-                    <td className="px-5 py-3 text-ink-2">{inv.planName}</td>
-                    <td className="tnum px-5 py-3">${inv.amount}.00</td>
-                    <td className="px-5 py-3">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2 py-0.5 text-[12px] font-semibold text-success-ink">
-                        {inv.status}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <button onClick={() => toast({ title: `Downloading ${inv.number}.pdf…`, variant: "info" })} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent-ink hover:underline">
-                        <Download className="size-3.5" /> PDF
-                      </button>
-                    </td>
+          {invoices.length === 0 ? (
+            <p className="px-5 pb-5 text-sm text-ink-3">No invoices yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-[12px] text-ink-3">
+                    <th className="px-5 py-2.5 font-medium">Invoice</th>
+                    <th className="px-5 py-2.5 font-medium">Date</th>
+                    <th className="px-5 py-2.5 font-medium">Amount</th>
+                    <th className="px-5 py-2.5 font-medium">Status</th>
+                    <th className="px-5 py-2.5" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {invoices.map((inv) => (
+                    <tr key={inv.id} className="border-b last:border-b-0">
+                      <td className="tnum px-5 py-3 font-medium">{inv.number}</td>
+                      <td className="tnum px-5 py-3 text-ink-2">{formatDate(inv.date, { month: "short", day: "numeric", year: "numeric" })}</td>
+                      <td className="tnum px-5 py-3">${inv.amount.toFixed(2)}</td>
+                      <td className="px-5 py-3">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[12px] font-semibold",
+                            inv.status === "paid" ? "bg-success-soft text-success-ink" : inv.status === "open" ? "bg-warn-soft text-warn-ink" : "bg-danger-soft text-danger-ink"
+                          )}
+                        >
+                          {inv.status}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        {inv.url ? (
+                          <a href={inv.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent-ink hover:underline">
+                            <Download className="size-3.5" /> View
+                          </a>
+                        ) : (
+                          <button onClick={() => toast({ title: `Downloading ${inv.number}.pdf…`, variant: "info" })} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent-ink hover:underline">
+                            <Download className="size-3.5" /> PDF
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       </PageBody>
 
@@ -193,27 +299,28 @@ export default function BillingPage() {
         open={!!targetPlan}
         onClose={() => setTargetPlan(null)}
         onConfirm={async () => {
-          const plan = PLAN_OFFERS.find((p) => p.id === targetPlan);
+          const id = targetPlan;
           setTargetPlan(null);
-          if (plan) {
-            if (DATA_MODE === "api") {
-              await postPlanChange(plan.id);
-              const billing = await fetchWorkspaceBilling(session.workspace);
-              setApiBilling(billing);
-            } else {
-              await workspaceService.changePlan(plan);
-            }
-            toast({
-              title: `Plan changed to ${plan.name}`,
-              description: "In production this runs through Stripe Checkout with verified webhooks.",
-              variant: "success",
-            });
-          }
+          if (id) await changePlan(id);
         }}
         title={`Switch to ${PLAN_OFFERS.find((p) => p.id === targetPlan)?.name ?? ""}?`}
-        body="In production this opens Stripe Checkout. Entitlements (channels, seats, storage, AI credits) update as soon as the payment webhook confirms."
-        confirmLabel="Confirm plan change"
+        body={
+          targetPlan === "free"
+            ? "Your paid features stay active until the end of the current billing period, then the Free plan limits apply."
+            : apiBilling?.hasPaymentMethod
+              ? "The new price applies now; the difference is prorated on your next invoice."
+              : "You'll be taken to Stripe's secure checkout to add a payment method."
+        }
+        confirmLabel={targetPlan === "free" ? "Downgrade" : "Continue"}
       />
     </div>
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <Suspense fallback={null}>
+      <BillingInner />
+    </Suspense>
   );
 }

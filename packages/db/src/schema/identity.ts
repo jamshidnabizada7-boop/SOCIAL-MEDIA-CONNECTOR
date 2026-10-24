@@ -33,6 +33,8 @@ export const users = pgTable(
     /** Consecutive failed sign-ins; reset on success. Drives temporary lockout. */
     failedLoginCount: integer("failed_login_count").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    /** Which notifications are also emailed. Missing keys use the defaults in the API. */
+    notificationPrefs: jsonb("notification_prefs").$type<Record<string, boolean>>().notNull().default({}),
     lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -105,6 +107,10 @@ export const subscriptions = pgTable("subscriptions", {
   seats: integer("seats").notNull().default(1),
   paymentBrand: text("payment_brand"),
   paymentLast4: text("payment_last4"),
+  /** Stripe linkage; null in self-hosted/free mode. */
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

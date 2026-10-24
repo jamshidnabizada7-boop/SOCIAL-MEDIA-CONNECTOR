@@ -5,7 +5,13 @@ import { Mail, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import type { Role, User } from "@/lib/types";
 import { workspaceService } from "@/lib/services/workspace";
 import { DATA_MODE } from "@/lib/api/client";
-import { fetchTeamMembers, inviteMember, changeMemberRole, removeMember as apiRemoveMember } from "@/lib/services/team-api";
+import {
+  fetchTeamMembers,
+  inviteMember,
+  changeMemberRole,
+  removeMember as apiRemoveMember,
+  transferOwnership,
+} from "@/lib/services/team-api";
 import { useSubscribe } from "@/lib/services/hooks";
 import { useSession, useToast } from "@/components/providers";
 import { PageHeader, PageBody } from "@/components/shell/page-header";
@@ -35,7 +41,7 @@ const PERMISSIONS: { label: string; roles: Record<Role, boolean> }[] = [
 
 export default function TeamPage() {
   useSubscribe(workspaceService);
-  const { session } = useSession();
+  const { session, refresh } = useSession();
   const toast = useToast();
   const [loaded, setLoaded] = useState(false);
   const [members, setMembers] = useState<User[]>([]);
@@ -43,6 +49,7 @@ export default function TeamPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<Role>("editor");
   const [removeTarget, setRemoveTarget] = useState<User | null>(null);
+  const [ownerTarget, setOwnerTarget] = useState<User | null>(null);
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string>();
 
@@ -64,8 +71,22 @@ export default function TeamPage() {
     setInviting(true);
     if (DATA_MODE === "api") {
       try {
-        const list = await inviteMember(inviteEmail, inviteRole);
-        setMembers(list);
+        const result = await inviteMember(inviteEmail, inviteRole);
+        setMembers(result.members);
+        if (!result.emailSent && result.inviteUrl) {
+          // No email delivery configured: hand the link to the inviter.
+          await navigator.clipboard?.writeText(result.inviteUrl).catch(() => {});
+          setInviting(false);
+          setInviteOpen(false);
+          setInviteEmail("");
+          toast({
+            title: "Invitation created — link copied",
+            description: `Email isn't set up on this server, so send ${inviteEmail} this link yourself: ${result.inviteUrl}`,
+            variant: "info",
+            duration: 15_000,
+          });
+          return;
+        }
       } catch (err) {
         setInviting(false);
         setInviteError((err as Error).message);
@@ -127,14 +148,18 @@ export default function TeamPage() {
                   value={m.role}
                   onChange={async (e) => {
                     const role = e.target.value as Role;
-                    if (DATA_MODE === "api") {
-                      await changeMemberRole(m.id, role);
-                      setMembers(await fetchTeamMembers());
-                    } else {
-                      await workspaceService.updateMemberRole(m.id, role);
-                      setMembers(workspaceService.members());
+                    try {
+                      if (DATA_MODE === "api") {
+                        await changeMemberRole(m.id, role);
+                        setMembers(await fetchTeamMembers());
+                      } else {
+                        await workspaceService.updateMemberRole(m.id, role);
+                        setMembers(workspaceService.members());
+                      }
+                      toast({ title: `${m.name} is now ${role}`, variant: "success" });
+                    } catch (err) {
+                      toast({ title: "Couldn't change the role", description: (err as Error).message, variant: "error" });
                     }
-                    toast({ title: `${m.name} is now ${role}`, variant: "success" });
                   }}
                   disabled={m.role === "owner"}
                   className="w-32 text-[13px]"
@@ -146,6 +171,11 @@ export default function TeamPage() {
                     </option>
                   ))}
                 </Select>
+                {DATA_MODE === "api" && session?.user.role === "owner" && m.role !== "owner" && (
+                  <Button variant="ghost" size="sm" onClick={() => setOwnerTarget(m)}>
+                    Make owner
+                  </Button>
+                )}
                 {m.role !== "owner" && (
                   <button
                     onClick={() => setRemoveTarget(m)}
@@ -277,6 +307,27 @@ export default function TeamPage() {
         </div>
       </Dialog>
 
+      <ConfirmDialog
+        open={!!ownerTarget}
+        onClose={() => setOwnerTarget(null)}
+        onConfirm={async () => {
+          const target = ownerTarget;
+          setOwnerTarget(null);
+          if (!target) return;
+          try {
+            await transferOwnership(target.id);
+            setMembers(await fetchTeamMembers());
+            await refresh();
+            toast({ title: `${target.name} now owns this workspace`, description: "You're an admin now.", variant: "success" });
+          } catch (err) {
+            toast({ title: "Couldn't transfer ownership", description: (err as Error).message, variant: "error" });
+          }
+        }}
+        title={`Make ${ownerTarget?.name ?? ""} the owner?`}
+        body="They get billing and deletion rights, and you become an admin. Only the new owner can undo this."
+        confirmLabel="Transfer ownership"
+        danger
+      />
       <ConfirmDialog
         open={!!removeTarget}
         onClose={() => setRemoveTarget(null)}

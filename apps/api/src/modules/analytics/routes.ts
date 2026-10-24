@@ -1,117 +1,177 @@
-import { and, eq, gte, isNotNull } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
-import { publishTargets, posts, socialAccounts, postMetrics } from "@aria/db";
+import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { z } from "zod";
+import { postMetrics, posts, publishTargets, socialAccounts } from "@aria/db";
 import type { AriaDatabase } from "@aria/db";
 import { requireWorkspacePermission } from "../../plugins/auth.js";
-import type { FastifyRequest, FastifyReply } from "fastify";
 
-export async function analyticsOverview(
-  db: AriaDatabase,
-  workspaceId: string,
-  rangeDays: number
-) {
-  const since = new Date(Date.now() - rangeDays * 86_400_000);
+type MetricKey = "impressions" | "engagements" | "likes" | "comments" | "shares" | "clicks";
+const METRIC_KEYS: MetricKey[] = ["impressions", "engagements", "likes", "comments", "shares", "clicks"];
 
-  const accounts = await db
-    .select({ id: socialAccounts.id, providerId: socialAccounts.providerId, handle: socialAccounts.handle, followers: socialAccounts.followers })
-    .from(socialAccounts)
-    .where(eq(socialAccounts.workspaceId, workspaceId));
+/** Sums that stay null when no destination reported the metric (the UI shows N/A, never a fake zero). */
+function addMetric(acc: number | null, value: number | null | undefined): number | null {
+  return typeof value === "number" ? (acc ?? 0) + value : acc;
+}
 
-  const followers = accounts.reduce((sum, a) => sum + (a.followers ?? 0), 0);
-
-  const publishedTargets = await db
+async function publishedInWindow(db: AriaDatabase, workspaceId: string, from: Date, to: Date) {
+  return db
     .select({
       targetId: publishTargets.id,
       providerId: publishTargets.providerId,
       accountId: publishTargets.accountId,
       publishedAt: publishTargets.publishedAt,
       postId: publishTargets.postId,
+      remoteUrl: publishTargets.remoteUrl,
+      title: posts.title,
+      caption: posts.caption,
     })
     .from(publishTargets)
-    .where(and(eq(publishTargets.state, "published"), gte(publishTargets.publishedAt, since)));
-  const workspacePostIds = new Set(
-    (await db.select({ id: posts.id }).from(posts).where(eq(posts.workspaceId, workspaceId))).map((p) => p.id)
-  );
-  const mine = publishedTargets.filter((t) => workspacePostIds.has(t.postId));
+    .innerJoin(posts, eq(posts.id, publishTargets.postId))
+    .where(
+      and(
+        eq(posts.workspaceId, workspaceId),
+        eq(publishTargets.state, "published"),
+        gte(publishTargets.publishedAt, from),
+        lt(publishTargets.publishedAt, to)
+      )
+    );
+}
 
-  // Series: posts published per day.
-  const seriesMap = new Map<string, number>();
+/** Latest snapshot per destination. */
+async function latestMetrics(db: AriaDatabase, targetIds: string[]) {
+  if (targetIds.length === 0) return new Map<string, typeof postMetrics.$inferSelect>();
+  const rows = await db
+    .select()
+    .from(postMetrics)
+    .where(inArray(postMetrics.targetId, targetIds))
+    .orderBy(desc(postMetrics.capturedAt));
+  const latest = new Map<string, typeof postMetrics.$inferSelect>();
+  for (const r of rows) if (!latest.has(r.targetId)) latest.set(r.targetId, r);
+  return latest;
+}
+
+function pctDelta(current: number | null, previous: number | null): number | null {
+  if (current === null || previous === null || previous === 0) return null;
+  return Math.round(((current - previous) / previous) * 1000) / 10;
+}
+
+export async function analyticsOverview(db: AriaDatabase, workspaceId: string, rangeDays: number) {
+  const now = new Date();
+  const since = new Date(now.getTime() - rangeDays * 86_400_000);
+  const prevSince = new Date(since.getTime() - rangeDays * 86_400_000);
+
+  const accounts = await db
+    .select({ id: socialAccounts.id, providerId: socialAccounts.providerId, handle: socialAccounts.handle, followers: socialAccounts.followers })
+    .from(socialAccounts)
+    .where(eq(socialAccounts.workspaceId, workspaceId));
+  const followers = accounts.reduce((sum, a) => sum + (a.followers ?? 0), 0);
+
+  const [mine, previous] = await Promise.all([
+    publishedInWindow(db, workspaceId, since, now),
+    publishedInWindow(db, workspaceId, prevSince, since),
+  ]);
+  const [metrics, prevMetrics] = await Promise.all([
+    latestMetrics(db, mine.map((t) => t.targetId)),
+    latestMetrics(db, previous.map((t) => t.targetId)),
+  ]);
+
+  // Series: posts published per day, plus engagements credited to the publish day.
+  const seriesMap = new Map<string, { published: number; engagements: number | null }>();
   for (let i = rangeDays - 1; i >= 0; i--) {
-    const date = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
-    seriesMap.set(date, 0);
+    seriesMap.set(new Date(now.getTime() - i * 86_400_000).toISOString().slice(0, 10), { published: 0, engagements: null });
   }
   for (const t of mine) {
     if (!t.publishedAt) continue;
-    const date = t.publishedAt.toISOString().slice(0, 10);
-    seriesMap.set(date, (seriesMap.get(date) ?? 0) + 1);
+    const day = seriesMap.get(t.publishedAt.toISOString().slice(0, 10));
+    if (!day) continue;
+    day.published += 1;
+    day.engagements = addMetric(day.engagements, metrics.get(t.targetId)?.engagements);
   }
-  const series = [...seriesMap.entries()].map(([date, published]) => ({ date, published }));
+  const series = [...seriesMap.entries()].map(([date, v]) => ({ date, published: v.published, engagements: v.engagements }));
 
-  // Per-network rollup. Engagement metrics stay null until ingestion exists —
-  // the UI renders N/A, never a zero (plan §49).
-  const byNetworkMap = new Map<string, { published: number; followers: number | null }>();
+  const totals = (rows: typeof mine, m: typeof metrics) => {
+    const out: Record<MetricKey, number | null> = { impressions: null, engagements: null, likes: null, comments: null, shares: null, clicks: null };
+    for (const t of rows) {
+      const snap = m.get(t.targetId);
+      if (!snap) continue;
+      for (const k of METRIC_KEYS) out[k] = addMetric(out[k], snap[k]);
+    }
+    return out;
+  };
+  const current = totals(mine, metrics);
+  const before = totals(previous, prevMetrics);
+
+  const byNetworkMap = new Map<string, { published: number; followers: number | null } & Record<MetricKey, number | null>>();
+  const blank = () => ({ published: 0, followers: null, impressions: null, engagements: null, likes: null, comments: null, shares: null, clicks: null });
   for (const a of accounts) {
-    byNetworkMap.set(a.providerId, { published: 0, followers: a.followers ?? 0 });
+    const entry = byNetworkMap.get(a.providerId) ?? blank();
+    entry.followers = (entry.followers ?? 0) + (a.followers ?? 0);
+    byNetworkMap.set(a.providerId, entry);
   }
   for (const t of mine) {
-    const entry = byNetworkMap.get(t.providerId) ?? { published: 0, followers: null };
+    const entry = byNetworkMap.get(t.providerId) ?? blank();
     entry.published += 1;
+    const snap = metrics.get(t.targetId);
+    if (snap) for (const k of METRIC_KEYS) entry[k] = addMetric(entry[k], snap[k]);
     byNetworkMap.set(t.providerId, entry);
   }
-
   const byNetwork = [...byNetworkMap.entries()]
-    .map(([provider, entry]) => {
-      const account = accounts.find((a) => a.providerId === provider);
-      return {
-        provider,
-        accountName: account?.handle ?? provider,
-        published: entry.published,
-        followers: entry.followers,
-        impressions: null,
-        engagements: null,
-        likes: null,
-        comments: null,
-        shares: null,
-        clicks: null,
-      };
-    })
+    .map(([provider, entry]) => ({
+      provider,
+      accountName: accounts.find((a) => a.providerId === provider)?.handle ?? provider,
+      ...entry,
+    }))
     .sort((a, b) => b.published - a.published);
 
-  // Ingested engagement metrics (provider pull jobs) — used when present.
-  const targetIds = mine.map((t) => t.targetId);
-  const ingested = targetIds.length
-    ? await db
-        .select({ targetId: postMetrics.targetId, impressions: postMetrics.impressions, engagements: postMetrics.engagements })
-        .from(postMetrics)
-        .where(isNotNull(postMetrics.impressions))
-    : [];
-  const metricsByTarget = new Map(ingested.map((m) => [m.targetId, m]));
   const topPosts = mine
-    .map((t) => metricsByTarget.get(t.targetId))
-    .filter((m): m is NonNullable<typeof m> => !!m)
-    .sort((a, b) => (b.impressions ?? 0) - (a.impressions ?? 0))
-    .slice(0, 4);
-  void topPosts;
+    .map((t) => ({ t, m: metrics.get(t.targetId) }))
+    .filter((x) => x.m && (x.m.engagements ?? 0) + (x.m.impressions ?? 0) > 0)
+    .sort((a, b) => (b.m!.engagements ?? 0) - (a.m!.engagements ?? 0) || (b.m!.impressions ?? 0) - (a.m!.impressions ?? 0))
+    .slice(0, 5)
+    .map(({ t, m }) => ({
+      postId: t.postId,
+      title: t.title || t.caption.slice(0, 60),
+      caption: t.caption,
+      provider: t.providerId,
+      publishedAt: t.publishedAt!.toISOString(),
+      impressions: m!.impressions,
+      engagements: m!.engagements,
+      url: t.remoteUrl,
+      hue: [...t.postId].reduce((a, c) => a + c.charCodeAt(0), 0) % 360,
+    }));
 
   return {
     mode: "live" as const,
-    overview: {
-      impressions: null as number | null,
-      engagements: null as number | null,
-      followers,
-      clicks: null as number | null,
-    },
+    published: mine.length,
+    overview: { impressions: current.impressions, engagements: current.engagements, followers, clicks: current.clicks },
     deltas: {
-      impressions: null,
-      engagements: null,
+      impressions: pctDelta(current.impressions, before.impressions),
+      engagements: pctDelta(current.engagements, before.engagements),
       followers: null,
-      clicks: null,
+      clicks: pctDelta(current.clicks, before.clicks),
+      published: pctDelta(mine.length, previous.length),
     },
     series,
     byNetwork,
-    topPosts: [],
+    topPosts,
+    /** Networks whose engagement is collected automatically. */
+    metricsNetworks: ["mastodon", "bluesky", "youtube"],
   };
 }
+
+const ingestSchema = z
+  .array(
+    z.object({
+      targetId: z.string().uuid(),
+      impressions: z.number().int().min(0).nullable().optional(),
+      engagements: z.number().int().min(0).nullable().optional(),
+      likes: z.number().int().min(0).nullable().optional(),
+      comments: z.number().int().min(0).nullable().optional(),
+      shares: z.number().int().min(0).nullable().optional(),
+      clicks: z.number().int().min(0).nullable().optional(),
+    })
+  )
+  .max(1000);
 
 export function registerAnalyticsRoutes(app: FastifyInstance): void {
   const db = app.database.db;
@@ -129,7 +189,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
 
   app.get(
     "/v1/workspaces/:workspaceId/analytics/overview",
-    { preHandler: requireWorkspacePermission(app) },
+    { preHandler: requireWorkspacePermission(app, "view_analytics") },
     async (req, reply) => {
       const { workspaceId } = req.params as { workspaceId: string };
       const { range } = req.query as { range?: string };
@@ -138,33 +198,25 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     }
   );
 
-  // Ingestion endpoint for provider pull jobs (Phase 8+ scheduled workers).
+  /** Manual/backfill ingestion for operators; the worker ingests automatically. */
   app.post("/v1/admin/analytics/ingest", { preHandler: requireAdmin() }, async (req, reply) => {
-    const rows = req.body as Array<{
-      targetId: string;
-      impressions?: number | null;
-      engagements?: number | null;
-      likes?: number | null;
-      comments?: number | null;
-      shares?: number | null;
-      clicks?: number | null;
-    }>;
-    if (!Array.isArray(rows)) {
-      return reply.status(400).send({ error: { code: "invalid_input", message: "Expected an array of metric rows." } });
+    const parsed = ingestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: { code: "invalid_input", message: parsed.error.issues[0]?.message ?? "Expected an array of metric rows." } });
     }
-    for (const row of rows) {
-      await db.insert(postMetrics).values({
-        targetId: row.targetId,
-        impressions: row.impressions ?? null,
-        engagements: row.engagements ?? null,
-        likes: row.likes ?? null,
-        comments: row.comments ?? null,
-        shares: row.shares ?? null,
-        clicks: row.clicks ?? null,
-      });
+    if (parsed.data.length > 0) {
+      await db.insert(postMetrics).values(
+        parsed.data.map((row) => ({
+          targetId: row.targetId,
+          impressions: row.impressions ?? null,
+          engagements: row.engagements ?? null,
+          likes: row.likes ?? null,
+          comments: row.comments ?? null,
+          shares: row.shares ?? null,
+          clicks: row.clicks ?? null,
+        }))
+      );
     }
-    return reply.status(201).send({ ingested: rows.length });
+    return reply.status(201).send({ ingested: parsed.data.length });
   });
 }
-
-

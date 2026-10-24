@@ -442,3 +442,110 @@ describe("post lifecycle", () => {
     expect(patched.json().post.targets.map((t: { accountId: string }) => t.accountId)).toEqual([second.id]);
   });
 });
+
+describe("billing", () => {
+  it("never grants a paid plan without payment", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${alice.workspaceId}/billing/plan`,
+      headers: { cookie: alice.cookie, origin: ORIGIN },
+      payload: { planId: "agency" },
+    });
+    expect(res.statusCode).toBe(400);
+    const checkout = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${alice.workspaceId}/billing/checkout`,
+      headers: { cookie: alice.cookie, origin: ORIGIN },
+      payload: { planId: "pro" },
+    });
+    expect(checkout.statusCode).toBe(503); // Stripe not configured in tests
+  });
+
+  it("verifies Stripe webhook signatures over the raw body", async () => {
+    const { createHmac } = await import("node:crypto");
+    const { verifyStripeSignature } = await import("../src/lib/stripe.js");
+    const body = JSON.stringify({ id: "evt_1", type: "ping" });
+    const t = Math.floor(Date.now() / 1000);
+    const sig = createHmac("sha256", "whsec_test").update(`${t}.${body}`).digest("hex");
+    expect(verifyStripeSignature(body, `t=${t},v1=${sig}`, "whsec_test")).toBe(true);
+    expect(verifyStripeSignature(body + " ", `t=${t},v1=${sig}`, "whsec_test")).toBe(false);
+    expect(verifyStripeSignature(body, `t=${t - 3600},v1=${sig}`, "whsec_test")).toBe(false);
+
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
+    const bad = await app.inject({
+      method: "POST",
+      url: "/v1/billing/webhook",
+      headers: { "content-type": "application/json", "stripe-signature": `t=${t},v1=deadbeef` },
+      payload: body,
+    });
+    expect(bad.statusCode).toBe(400);
+    const good = await app.inject({
+      method: "POST",
+      url: "/v1/billing/webhook",
+      headers: { "content-type": "application/json", "stripe-signature": `t=${t},v1=${sig}` },
+      payload: body,
+    });
+    expect(good.statusCode).toBe(200);
+  });
+});
+
+describe("account lifecycle", () => {
+  it("exports workspace data without credentials", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: `/v1/workspaces/${alice.workspaceId}/export`,
+      headers: { cookie: alice.cookie },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-disposition"]).toContain("attachment");
+    const body = res.json();
+    expect(body.posts.length).toBeGreaterThan(0);
+    expect(res.body).not.toMatch(/accessTokenEnc|refreshTokenEnc|passwordHash/);
+  });
+
+  it("blocks deleting an account that owns a shared workspace until ownership moves", async () => {
+    const del = await app.inject({
+      method: "DELETE",
+      url: "/v1/auth/me",
+      headers: { cookie: alice.cookie, origin: ORIGIN },
+      payload: { password: "correct-horse-battery" },
+    });
+    expect(del.statusCode).toBe(409); // Bob joined Alice's workspace earlier
+  });
+
+  it("deletes a solo account and its workspace, stopping scheduled posts", async () => {
+    const solo = await signup("solo@sec.test", "Solo WS");
+    const [acc] = await app.database.db
+      .insert(socialAccounts)
+      .values({ workspaceId: solo.workspaceId, providerId: "mastodon", externalAccountId: "s1", displayName: "Solo", handle: "@solo", connection: "healthy", scopes: [] })
+      .returning();
+    const created = await app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${solo.workspaceId}/posts`,
+      headers: { cookie: solo.cookie, origin: ORIGIN },
+      payload: { caption: "later", accountIds: [acc.id], scheduledAt: new Date(Date.now() + 3_600_000).toISOString() },
+    });
+    const targetId = created.json().post.targets[0].id;
+    const wrong = await app.inject({
+      method: "DELETE",
+      url: "/v1/auth/me",
+      headers: { cookie: solo.cookie, origin: ORIGIN },
+      payload: { password: "nope" },
+    });
+    expect(wrong.statusCode).toBe(400);
+    const del = await app.inject({
+      method: "DELETE",
+      url: "/v1/auth/me",
+      headers: { cookie: solo.cookie, origin: ORIGIN },
+      payload: { password: "correct-horse-battery" },
+    });
+    expect(del.statusCode).toBe(204);
+    const { publishJobs, workspaces } = await import("@aria/db");
+    const jobs = await app.database.db.select().from(publishJobs).where(eq(publishJobs.targetId, targetId));
+    expect(jobs.every((j) => j.state === "dead_letter")).toBe(true);
+    const ws = (await app.database.db.select().from(workspaces).where(eq(workspaces.id, solo.workspaceId)))[0];
+    expect(ws.deletedAt).toBeTruthy();
+    const me = await app.inject({ method: "GET", url: "/v1/auth/me", headers: { cookie: solo.cookie } });
+    expect(me.statusCode).toBe(401);
+  });
+});

@@ -6,6 +6,7 @@ import { PLAN_OFFERS } from "@/lib/services/workspace";
 import { ProviderBadge } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
 import { FanoutDemo } from "@/components/marketing/fanout-demo";
+import { DATA_MODE } from "@/lib/api/client";
 import {
   CalendarClock,
   CircleCheckBig,
@@ -132,11 +133,13 @@ export default function LandingPage() {
                 <Button size="lg">Start publishing — free</Button>
               </Link>
               <Link href="/signin">
-                <Button variant="secondary" size="lg">Explore the demo workspace</Button>
+                <Button variant="secondary" size="lg">{DATA_MODE === "mock" ? "Explore the demo workspace" : "Sign in"}</Button>
               </Link>
             </div>
             <p className="mt-3 text-[13px] text-ink-3">
-              No credit card. The demo workspace comes pre-loaded with realistic content.
+              {DATA_MODE === "mock"
+                ? "No credit card. The demo workspace comes pre-loaded with realistic content."
+                : "No credit card needed for the Free plan."}
             </p>
           </div>
           <div className="rise flex justify-center lg:justify-end" style={{ animationDelay: "80ms" }}>
@@ -262,8 +265,14 @@ export default function LandingPage() {
             <a href="#features" className="hover:text-ink">Features</a>
             <a href="#pricing" className="hover:text-ink">Pricing</a>
             <Link href="/signin" className="hover:text-ink">Sign in</Link>
+            <Link href="/legal/privacy" className="hover:text-ink">Privacy</Link>
+            <Link href="/legal/terms" className="hover:text-ink">Terms</Link>
+            <Link href="/legal/data-deletion" className="hover:text-ink">Data deletion</Link>
           </nav>
-          <span>© 2026 Aria Hub. Interface prototype — external networks are simulated.</span>
+          <span>
+            © {new Date().getFullYear()} Aria Hub.
+            {DATA_MODE === "mock" ? " Interface prototype — external networks are simulated." : ""}
+          </span>
         </div>
       </footer>
     </div>

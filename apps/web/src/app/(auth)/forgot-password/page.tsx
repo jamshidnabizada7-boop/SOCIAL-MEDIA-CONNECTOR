@@ -5,6 +5,8 @@ import { useState } from "react";
 import { CircleCheckBig, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/primitives";
+import { DATA_MODE } from "@/lib/api/client";
+import { sessionApi } from "@/lib/api/session";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -20,9 +22,15 @@ export default function ForgotPasswordPage() {
     }
     setError(undefined);
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setLoading(false);
-    setSent(true);
+    try {
+      if (DATA_MODE === "api") await sessionApi.forgotPassword(email);
+      else await new Promise((r) => setTimeout(r, 600));
+      setSent(true);
+    } catch (err) {
+      setError((err as Error).message || "Couldn't send the link. Try again in a minute.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (sent) {
@@ -34,7 +42,7 @@ export default function ForgotPasswordPage() {
         <h1 className="mt-4 font-display text-2xl font-bold tracking-tight">Check your inbox</h1>
         <p className="mt-2 text-sm leading-relaxed text-ink-2">
           If an account exists for <span className="font-medium text-ink">{email}</span>, a reset
-          link is on its way. The link expires in 30 minutes.
+          link is on its way. The link expires in 1 hour.
         </p>
         <Button variant="secondary" className="mt-6 w-full" onClick={() => setSent(false)}>
           Use a different email

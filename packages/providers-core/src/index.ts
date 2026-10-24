@@ -14,3 +14,4 @@ export * from "./x.js";
 export * from "./threads.js";
 export * from "./instagram.js";
 export * from "./pinterest.js";
+export * from "./metrics.js";

@@ -1,10 +1,12 @@
 import { generateSessionToken, hashToken, sessions, userTokens, users, workspaceMembers, workspaces } from "@aria/db";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, ne } from "drizzle-orm";
+import { resolveNotificationPrefs } from "@aria/shared-types";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { createSession, destroySession, requireAuth } from "../../plugins/auth.js";
 import { writeAudit } from "../../lib/audit.js";
 import { actionEmail, sendMail, webAppUrl } from "../../lib/mailer.js";
+import { retireWorkspaces } from "../../lib/workspace-lifecycle.js";
 
 const passwordSchema = z.string().min(8, "Use at least 8 characters.").max(200);
 
@@ -326,6 +328,88 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       .where(
         and(eq(workspaceMembers.userId, req.user!.id), eq(workspaceMembers.status, "active"), isNull(workspaces.deletedAt))
       );
-    return reply.send({ user: user ? publicUser(user) : req.user, workspaces: memberships });
+    return reply.send({
+      user: user ? publicUser(user) : req.user,
+      notificationPrefs: resolveNotificationPrefs(user?.notificationPrefs),
+      workspaces: memberships,
+    });
   });
+
+  app.patch("/v1/auth/me", { preHandler: requireAuth(app) }, async (req, reply) => {
+    const parsed = z
+      .object({
+        name: z.string().trim().min(2).max(80).optional(),
+        notificationPrefs: z.object({ failures: z.boolean().optional(), reauth: z.boolean().optional() }).optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: { code: "invalid_input", message: parsed.error.issues[0]?.message ?? "Invalid input." } });
+    }
+    const current = (await db.select().from(users).where(eq(users.id, req.user!.id)).limit(1))[0];
+    if (!current) return reply.status(404).send({ error: { code: "not_found", message: "Account not found." } });
+    const prefs = parsed.data.notificationPrefs
+      ? { ...resolveNotificationPrefs(current.notificationPrefs), ...parsed.data.notificationPrefs }
+      : current.notificationPrefs;
+    const [updated] = await db
+      .update(users)
+      .set({ ...(parsed.data.name ? { name: parsed.data.name } : {}), notificationPrefs: prefs, updatedAt: new Date() })
+      .where(eq(users.id, current.id))
+      .returning();
+    return reply.send({ user: publicUser(updated), notificationPrefs: resolveNotificationPrefs(updated.notificationPrefs) });
+  });
+
+  /**
+   * Account deletion (right to erasure). Requires the password. Workspaces the
+   * user owns alone are deleted with the account; a workspace that still has
+   * other members must be handed over first, so nobody loses their work.
+   */
+  app.delete(
+    "/v1/auth/me",
+    { preHandler: requireAuth(app), config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const parsed = z.object({ password: z.string().min(1) }).safeParse(req.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: { code: "invalid_input", message: "Enter your password to confirm." } });
+      }
+      const user = (await db.select().from(users).where(eq(users.id, req.user!.id)).limit(1))[0];
+      const bcrypt = await import("bcryptjs");
+      if (!user?.passwordHash || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) {
+        return reply.status(400).send({ error: { code: "invalid_credentials", message: "That password is incorrect." } });
+      }
+      const owned = await db
+        .select({ workspaceId: workspaceMembers.workspaceId, name: workspaces.name })
+        .from(workspaceMembers)
+        .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+        .where(and(eq(workspaceMembers.userId, user.id), eq(workspaceMembers.role, "owner"), isNull(workspaces.deletedAt)));
+      if (owned.length > 0) {
+        const shared = await db
+          .select({ workspaceId: workspaceMembers.workspaceId })
+          .from(workspaceMembers)
+          .where(
+            and(
+              inArray(workspaceMembers.workspaceId, owned.map((o) => o.workspaceId)),
+              ne(workspaceMembers.userId, user.id),
+              eq(workspaceMembers.status, "active")
+            )
+          );
+        if (shared.length > 0) {
+          const names = owned.filter((o) => shared.some((s) => s.workspaceId === o.workspaceId)).map((o) => o.name);
+          return reply.status(409).send({
+            error: {
+              code: "owns_shared_workspace",
+              message: `Transfer ownership of ${names.join(", ")} to a teammate (Team → member menu) before deleting your account.`,
+            },
+          });
+        }
+      }
+      await db.transaction(async (tx) => {
+        await retireWorkspaces(tx, owned.map((o) => o.workspaceId));
+        await writeAudit(tx, { actorUserId: user.id, action: "user.deleted", targetType: "user", targetId: user.id, ip: req.ip });
+        // Cascades sessions, memberships and tokens; audit rows keep the id only.
+        await tx.delete(users).where(eq(users.id, user.id));
+      });
+      await destroySession(app, req, reply);
+      return reply.status(204).send();
+    }
+  );
 }

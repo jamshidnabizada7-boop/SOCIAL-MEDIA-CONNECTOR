@@ -514,6 +514,24 @@ export function roleHasPermission(role: Role, permission: Permission): boolean {
 }
 
 /* ------------------------------------------------------------------ */
+/* Email notification preferences                                      */
+/* ------------------------------------------------------------------ */
+
+/** Which events are also emailed to a user (in-app notifications always appear). */
+export interface NotificationPrefs {
+  /** A destination failed or needs a decision. */
+  failures: boolean;
+  /** An account lost access or needs reconnecting. */
+  reauth: boolean;
+}
+
+export const NOTIFICATION_PREF_DEFAULTS: NotificationPrefs = { failures: true, reauth: true };
+
+export function resolveNotificationPrefs(stored: Record<string, boolean> | null | undefined): NotificationPrefs {
+  return { ...NOTIFICATION_PREF_DEFAULTS, ...(stored ?? {}) };
+}
+
+/* ------------------------------------------------------------------ */
 /* Provider capability registry (canonical, backend-side)              */
 /* ------------------------------------------------------------------ */
 export * from "./providers.js";

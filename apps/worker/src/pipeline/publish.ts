@@ -20,6 +20,7 @@ import { getAdapter, usesRealCredentials } from "../adapters/registry.js";
 import type { AdapterAccountContext, AdapterMedia, AdapterPublishInput, PublishErrorInfo, SocialProviderAdapter } from "../adapters/contract.js";
 import { isCircuitOpen, recordOutcome } from "../reliability/circuit.js";
 import { backoffMs, jobOutcome, type ClaimedJob } from "./jobs.js";
+import { emailAlert } from "../mailer.js";
 
 export type Logger = (msg: string, meta?: Record<string, unknown>) => void;
 
@@ -117,6 +118,8 @@ async function notify(
 ) {
   if (!workspaceId) return;
   await db.insert(notifications).values({ workspaceId, ...n });
+  // Email is best-effort and never blocks or fails the job.
+  void emailAlert(db, workspaceId, n, () => {});
 }
 
 /**

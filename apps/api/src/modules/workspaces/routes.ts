@@ -16,6 +16,7 @@ import { requireWorkspacePermission, requireAuth } from "../../plugins/auth.js";
 import { writeAudit } from "../../lib/audit.js";
 import { checkMemberLimit, effectivePlan } from "../../lib/limits.js";
 import { actionEmail, sendMail, webAppUrl } from "../../lib/mailer.js";
+import { retireWorkspaces } from "../../lib/workspace-lifecycle.js";
 
 const INVITE_TTL_MS = 7 * 86_400_000;
 
@@ -160,7 +161,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance): void {
       if (req.member!.role !== "owner") {
         return reply.status(403).send({ error: { code: "forbidden", message: "Only the owner can delete a workspace." } });
       }
-      await db.update(workspaces).set({ deletedAt: new Date() }).where(eq(workspaces.id, workspaceId));
+      await db.transaction((tx) => retireWorkspaces(tx, [workspaceId]));
       await writeAudit(db, {
         workspaceId,
         actorUserId: req.user!.id,
@@ -502,6 +503,54 @@ export function registerWorkspaceRoutes(app: FastifyInstance): void {
     }
   );
 
+  /** Owner hands the workspace to another active member and becomes an admin. */
+  app.post(
+    "/v1/workspaces/:workspaceId/transfer-ownership",
+    { preHandler: requireWorkspacePermission(app, "manage_workspace") },
+    async (req, reply) => {
+      const { workspaceId } = req.params as { workspaceId: string };
+      if (req.member!.role !== "owner") {
+        return reply.status(403).send({ error: { code: "forbidden", message: "Only the owner can transfer ownership." } });
+      }
+      const parsed = z.object({ userId: z.string().uuid() }).safeParse(req.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: { code: "invalid_input", message: "Choose a member." } });
+      }
+      const target = (
+        await db
+          .select({ id: workspaceMembers.id })
+          .from(workspaceMembers)
+          .where(
+            and(
+              eq(workspaceMembers.workspaceId, workspaceId),
+              eq(workspaceMembers.userId, parsed.data.userId),
+              eq(workspaceMembers.status, "active")
+            )
+          )
+          .limit(1)
+      )[0];
+      if (!target || parsed.data.userId === req.user!.id) {
+        return reply.status(404).send({ error: { code: "not_found", message: "Member not found." } });
+      }
+      await db.transaction(async (tx) => {
+        await tx
+          .update(workspaceMembers)
+          .set({ role: "admin" })
+          .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, req.user!.id)));
+        await tx.update(workspaceMembers).set({ role: "owner" }).where(eq(workspaceMembers.id, target.id));
+        await writeAudit(tx, {
+          workspaceId,
+          actorUserId: req.user!.id,
+          action: "workspace.ownership_transferred",
+          targetType: "user",
+          targetId: parsed.data.userId,
+          ip: req.ip,
+        });
+      });
+      return reply.send({ ok: true });
+    }
+  );
+
   /* ---------------------------------- Brands -------------------------------- */
 
   app.get("/v1/workspaces/:workspaceId/brands", { preHandler: requireWorkspacePermission(app) }, async (req, reply) => {
@@ -567,6 +616,77 @@ export function registerWorkspaceRoutes(app: FastifyInstance): void {
         ip: req.ip,
       });
       return reply.status(204).send();
+    }
+  );
+
+  /**
+   * Data export (portability): everything the workspace owns as one JSON
+   * file. Credentials are never included.
+   */
+  app.get(
+    "/v1/workspaces/:workspaceId/export",
+    { preHandler: requireWorkspacePermission(app, "manage_workspace"), config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const { workspaceId } = req.params as { workspaceId: string };
+      const { mediaAssets, postMedia, postVariants, posts, publishTargets, queueSlots, remotePosts, socialAccounts } = await import("@aria/db");
+      const { inArray } = await import("drizzle-orm");
+      const workspace = (await db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1))[0];
+      const postRows = await db.select().from(posts).where(eq(posts.workspaceId, workspaceId));
+      const postIds = postRows.map((p) => p.id);
+      const targets = postIds.length ? await db.select().from(publishTargets).where(inArray(publishTargets.postId, postIds)) : [];
+      const targetIds = targets.map((t) => t.id);
+      const [variants, media, remotes] = await Promise.all([
+        postIds.length ? db.select().from(postVariants).where(inArray(postVariants.postId, postIds)) : [],
+        postIds.length ? db.select().from(postMedia).where(inArray(postMedia.postId, postIds)) : [],
+        targetIds.length ? db.select().from(remotePosts).where(inArray(remotePosts.targetId, targetIds)) : [],
+      ]);
+      const accounts = await db
+        .select({
+          id: socialAccounts.id,
+          providerId: socialAccounts.providerId,
+          displayName: socialAccounts.displayName,
+          handle: socialAccounts.handle,
+          instanceUrl: socialAccounts.instanceUrl,
+          connectedAt: socialAccounts.connectedAt,
+        })
+        .from(socialAccounts)
+        .where(eq(socialAccounts.workspaceId, workspaceId));
+      const assets = await db.select().from(mediaAssets).where(eq(mediaAssets.workspaceId, workspaceId));
+      const members = await db
+        .select({ email: users.email, name: users.name, role: workspaceMembers.role, joinedAt: workspaceMembers.joinedAt })
+        .from(workspaceMembers)
+        .innerJoin(users, eq(users.id, workspaceMembers.userId))
+        .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.status, "active")));
+      const slots = await db.select().from(queueSlots).where(eq(queueSlots.workspaceId, workspaceId));
+      const audit = await db
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.workspaceId, workspaceId))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(5000);
+      await writeAudit(db, { workspaceId, actorUserId: req.user!.id, action: "workspace.exported", targetType: "workspace", targetId: workspaceId, ip: req.ip });
+      const body = {
+        exportedAt: new Date().toISOString(),
+        workspace,
+        members,
+        accounts,
+        media: assets.map(({ storageKey: _storageKey, ...m }) => m),
+        posts: postRows.map((p) => ({
+          ...p,
+          mediaIds: media.filter((m) => m.postId === p.id).sort((a, b) => a.position - b.position).map((m) => m.mediaId),
+          variants: variants.filter((v) => v.postId === p.id),
+          targets: targets
+            .filter((t) => t.postId === p.id)
+            .map((t) => ({ ...t, remote: remotes.find((r) => r.targetId === t.id) ?? null })),
+        })),
+        queueSlots: slots,
+        auditLog: audit,
+      };
+      const filename = `aria-hub-${workspace?.slug ?? workspaceId}-${new Date().toISOString().slice(0, 10)}.json`;
+      return reply
+        .header("Content-Type", "application/json; charset=utf-8")
+        .header("Content-Disposition", `attachment; filename="${filename}"`)
+        .send(JSON.stringify(body, null, 2));
     }
   );
 

@@ -18,8 +18,9 @@ export interface ApiTeamMember {
   lastActiveAt?: string | null;
 }
 
+/** Active members plus pending invitations (status "invited", id = invitation id). */
 export async function fetchTeamMembers(): Promise<User[]> {
-  const res = await apiGet<{ members: ApiTeamMember[] }>("/v1/workspaces/current/team");
+  const res = await apiGet<{ members: ApiTeamMember[] }>("/v1/workspaces/current/members");
   return res.members.map((m) => ({
     id: m.userId,
     name: m.name,
@@ -31,9 +32,16 @@ export async function fetchTeamMembers(): Promise<User[]> {
   }));
 }
 
-export async function inviteMember(email: string, role: User["role"]): Promise<User[]> {
-  await apiPost("/v1/workspaces/current/members", { email, role });
-  return fetchTeamMembers();
+export interface InviteResult {
+  members: User[];
+  emailSent: boolean;
+  /** Present when email delivery isn't configured — share it with the invitee directly. */
+  inviteUrl?: string;
+}
+
+export async function inviteMember(email: string, role: User["role"]): Promise<InviteResult> {
+  const res = await apiPost<{ emailSent: boolean; inviteUrl?: string }>("/v1/workspaces/current/members", { email, role });
+  return { members: await fetchTeamMembers(), emailSent: res.emailSent, inviteUrl: res.inviteUrl };
 }
 
 export async function changeMemberRole(id: string, role: User["role"]): Promise<void> {
@@ -42,4 +50,8 @@ export async function changeMemberRole(id: string, role: User["role"]): Promise<
 
 export async function removeMember(id: string): Promise<void> {
   await apiDelete(`/v1/workspaces/current/members/${id}`);
+}
+
+export async function transferOwnership(userId: string): Promise<void> {
+  await apiPost("/v1/workspaces/current/transfer-ownership", { userId });
 }

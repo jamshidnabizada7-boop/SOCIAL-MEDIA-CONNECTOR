@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Avatar, Card, CardHeader, Field, Input, Select, Skeleton, Tabs } from "@/components/ui/primitives";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { DATA_MODE } from "@/lib/api/client";
+import { sessionApi, type NotificationPrefs } from "@/lib/api/session";
 
 type Tab = "general" | "profile" | "notifications" | "danger";
 
@@ -46,6 +48,23 @@ function SettingsInner() {
     weekly: true,
     product: false,
   });
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string>();
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteAccountError, setDeleteAccountError] = useState<string>();
+  const api = DATA_MODE === "api";
+
+  useEffect(() => {
+    if (!api) return;
+    sessionApi
+      .notificationPrefs()
+      .then((p) => setNotify((n) => ({ ...n, ...p })))
+      .catch(() => {});
+  }, [api]);
 
   useEffect(() => {
     if (session) {
@@ -62,10 +81,74 @@ function SettingsInner() {
 
   const saveWorkspace = async () => {
     setSavingWs(true);
-    await workspaceService.updateWorkspace(session.workspace.id, { name, timezone, locale });
-    refresh();
-    setSavingWs(false);
-    toast({ title: "Workspace settings saved", variant: "success" });
+    try {
+      await workspaceService.updateWorkspace(session.workspace.id, { name, timezone, locale });
+      await refresh();
+      toast({ title: "Workspace settings saved", variant: "success" });
+    } catch (err) {
+      toast({ title: "Couldn't save", description: (err as Error).message, variant: "error" });
+    } finally {
+      setSavingWs(false);
+    }
+  };
+
+  const saveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      if (api) await sessionApi.updateProfile({ name: profileName.trim() });
+      else await new Promise((r) => setTimeout(r, 400));
+      await refresh();
+      toast({ title: "Profile updated", variant: "success" });
+    } catch (err) {
+      toast({ title: "Couldn't save", description: (err as Error).message, variant: "error" });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const changePassword = async () => {
+    if (newPassword.length < 8) {
+      setPasswordError("Use at least 8 characters.");
+      return;
+    }
+    setPasswordError(undefined);
+    setSavingPassword(true);
+    try {
+      await sessionApi.changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      toast({ title: "Password changed", description: "Other devices were signed out.", variant: "success" });
+    } catch (err) {
+      setPasswordError((err as Error).message);
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  const toggleNotify = async (key: keyof NotificationPrefs | "successes" | "weekly" | "product", value: boolean) => {
+    setNotify((n) => ({ ...n, [key]: value }));
+    if (!api || (key !== "failures" && key !== "reauth")) return;
+    try {
+      await sessionApi.updateProfile({ notificationPrefs: { [key]: value } });
+    } catch (err) {
+      setNotify((n) => ({ ...n, [key]: !value }));
+      toast({ title: "Couldn't save the preference", description: (err as Error).message, variant: "error" });
+    }
+  };
+
+  const exportData = async () => {
+    if (!api) {
+      toast({ title: "Export queued", description: "You'll get an email when it's ready.", variant: "info" });
+      return;
+    }
+    setExporting(true);
+    try {
+      await sessionApi.downloadExport(session.workspace.id);
+    } catch (err) {
+      toast({ title: "Export failed", description: (err as Error).message, variant: "error" });
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -144,12 +227,14 @@ function SettingsInner() {
             <div className="flex flex-col gap-4 p-5">
               <div className="flex items-center gap-4">
                 <Avatar name={profileName || "You"} hue={session.user.avatarHue} size="lg" />
-                <div>
-                  <Button variant="secondary" size="sm" onClick={() => toast({ title: "Avatar upload is mocked in this prototype", variant: "info" })}>
-                    Change avatar
-                  </Button>
-                  <p className="mt-1 text-[12px] text-ink-3">PNG or JPG, square works best.</p>
-                </div>
+                {!api && (
+                  <div>
+                    <Button variant="secondary" size="sm" onClick={() => toast({ title: "Avatar upload is mocked in this prototype", variant: "info" })}>
+                      Change avatar
+                    </Button>
+                    <p className="mt-1 text-[12px] text-ink-3">PNG or JPG, square works best.</p>
+                  </div>
+                )}
               </div>
               <Field label="Full name" htmlFor="p-name">
                 <Input id="p-name" value={profileName} onChange={(e) => setProfileName(e.target.value)} />
@@ -166,13 +251,8 @@ function SettingsInner() {
                 </p>
                 <Button
                   loading={savingProfile}
-                  disabled={profileName === session.user.name}
-                  onClick={async () => {
-                    setSavingProfile(true);
-                    await new Promise((r) => setTimeout(r, 600));
-                    setSavingProfile(false);
-                    toast({ title: "Profile updated", variant: "success" });
-                  }}
+                  disabled={profileName.trim() === session.user.name || profileName.trim().length < 2}
+                  onClick={saveProfile}
                 >
                   <Save className="size-4" /> Save changes
                 </Button>
@@ -181,9 +261,31 @@ function SettingsInner() {
           </Card>
         )}
 
+        {tab === "profile" && api && (
+          <Card className="mt-5 max-w-xl">
+            <CardHeader title="Password" description="Changing it signs out every other device." />
+            <div className="flex flex-col gap-4 p-5">
+              <Field label="Current password" htmlFor="pw-current">
+                <Input id="pw-current" type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+              </Field>
+              <Field label="New password" htmlFor="pw-new" error={passwordError}>
+                <Input id="pw-new" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} aria-invalid={!!passwordError} />
+              </Field>
+              <div className="flex justify-end border-t pt-4">
+                <Button onClick={changePassword} loading={savingPassword} disabled={!currentPassword || !newPassword}>
+                  Change password
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {tab === "notifications" && (
           <Card className="max-w-xl">
-            <CardHeader title="Notifications" description="We notify you about things that need action — not routine successes." />
+            <CardHeader
+              title="Notifications"
+              description={api ? "Everything appears in the bell. Choose what is also emailed to you." : "We notify you about things that need action — not routine successes."}
+            />
             <ul className="divide-y">
               {[
                 { key: "failures" as const, title: "Failed or paused deliveries", body: "When a destination fails or needs your action." },
@@ -191,7 +293,9 @@ function SettingsInner() {
                 { key: "successes" as const, title: "Successful publishes", body: "Off by default — success shouldn't be noisy." },
                 { key: "weekly" as const, title: "Weekly digest", body: "A Monday summary of performance and upcoming posts." },
                 { key: "product" as const, title: "Product updates", body: "Occasional notes about new capabilities." },
-              ].map((row) => (
+              ]
+                .filter((row) => !api || row.key === "failures" || row.key === "reauth")
+                .map((row) => (
                 <li key={row.key} className="flex items-center justify-between gap-4 px-5 py-4">
                   <div>
                     <p className="text-sm font-semibold">{row.title}</p>
@@ -199,9 +303,7 @@ function SettingsInner() {
                   </div>
                   <SwitchSimple
                     checked={notify[row.key]}
-                    onChange={(v) => {
-                      setNotify((n) => ({ ...n, [row.key]: v }));
-                    }}
+                    onChange={(v) => void toggleNotify(row.key, v)}
                   />
                 </li>
               ))}
@@ -231,6 +333,7 @@ function SettingsInner() {
                   </Button>
                 </div>
               </div>
+              {!api && (
               <div className="rounded-lg border p-4">
                 <p className="text-sm font-semibold">Reset demo data</p>
                 <p className="mt-1 text-[13px] text-ink-2">
@@ -248,13 +351,28 @@ function SettingsInner() {
                   Reset prototype data
                 </Button>
               </div>
+              )}
               <div className="rounded-lg border p-4">
                 <p className="text-sm font-semibold">Export your data</p>
-                <p className="mt-1 text-[13px] text-ink-2">Posts, media metadata and analytics as CSV + JSON.</p>
-                <Button variant="secondary" className="mt-3" onClick={() => toast({ title: "Export queued", description: "You'll get an email when it's ready.", variant: "info" })}>
-                  Request export
+                <p className="mt-1 text-[13px] text-ink-2">
+                  {api ? "Posts, destinations, media metadata, team and audit log as one JSON file. Tokens are never included." : "Posts, media metadata and analytics as CSV + JSON."}
+                </p>
+                <Button variant="secondary" className="mt-3" onClick={exportData} loading={exporting}>
+                  {api ? "Download export" : "Request export"}
                 </Button>
               </div>
+              {api && (
+                <div className="rounded-lg border border-danger/25 p-4">
+                  <p className="text-sm font-semibold">Delete your account</p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+                    Removes your login and memberships. Workspaces you own alone are deleted too; shared ones must be
+                    handed to a teammate first.
+                  </p>
+                  <Button variant="danger" className="mt-3" onClick={() => setDeleteAccountOpen(true)}>
+                    <Trash2 className="size-4" /> Delete account
+                  </Button>
+                </div>
+              )}
             </div>
           </Card>
         )}
@@ -263,8 +381,20 @@ function SettingsInner() {
       <ConfirmDialog
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
-        onConfirm={() => {
+        onConfirm={async () => {
           setDeleteOpen(false);
+          if (api) {
+            try {
+              await sessionApi.deleteWorkspace(session.workspace.id);
+            } catch (err) {
+              toast({ title: "Couldn't delete the workspace", description: (err as Error).message, variant: "error" });
+              return;
+            }
+            localStorage.removeItem("aria-workspace");
+            toast({ title: "Workspace deleted", variant: "warning" });
+            window.location.href = "/dashboard";
+            return;
+          }
           signOut();
           toast({ title: "Workspace deleted (simulated)", description: "In production this would be a scheduled deletion with a grace period.", variant: "warning" });
           window.location.href = "/";
@@ -272,6 +402,35 @@ function SettingsInner() {
         title="Really delete this workspace?"
         body="This cannot be undone. All tokens, drafts, schedules and media references are removed."
         confirmLabel="Delete workspace"
+        danger
+      />
+
+      <ConfirmDialog
+        open={deleteAccountOpen}
+        onClose={() => {
+          setDeleteAccountOpen(false);
+          setDeletePassword("");
+          setDeleteAccountError(undefined);
+        }}
+        onConfirm={async () => {
+          try {
+            await sessionApi.deleteAccount(deletePassword);
+          } catch (err) {
+            setDeleteAccountError((err as Error).message);
+            return;
+          }
+          localStorage.removeItem("aria-workspace");
+          window.location.href = "/";
+        }}
+        title="Delete your account?"
+        body={
+          <div className="flex flex-col gap-3">
+            <p>This can&apos;t be undone. Enter your password to confirm.</p>
+            <Input type="password" autoComplete="current-password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} aria-label="Password" />
+            {deleteAccountError && <p className="text-[13px] text-danger-ink">{deleteAccountError}</p>}
+          </div>
+        }
+        confirmLabel="Delete account"
         danger
       />
     </div>

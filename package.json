@@ -26,7 +26,8 @@
     "db:seed": "npm run seed -w @aria/db",
     "dev:db": "tsx packages/db/src/server.ts",
     "lint": "eslint apps/api apps/worker packages && npm run lint -w @aria/web",
-    "typecheck": "tsc --noEmit -p apps/api && tsc --noEmit -p apps/worker && tsc --noEmit -p packages/db && tsc --noEmit -p packages/shared-types && tsc --noEmit -p packages/providers-core && tsc --noEmit -p packages/media-core"
+    "typecheck": "tsc --noEmit -p apps/api && tsc --noEmit -p apps/worker && tsc --noEmit -p packages/db && tsc --noEmit -p packages/shared-types && tsc --noEmit -p packages/providers-core && tsc --noEmit -p packages/media-core",
+    "admin": "npm run admin -w @aria/db --"
   },
   "allowScripts": {
     "esbuild@0.18.20": true,

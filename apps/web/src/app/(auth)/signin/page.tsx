@@ -1,15 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/primitives";
 import { useSession, useToast } from "@/components/providers";
 import { DATA_MODE } from "@/lib/api/client";
 
-export default function SignInPage() {
+/** Only same-site relative paths are honored as post-auth destinations. */
+function safeNext(value: string | null): string | null {
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : null;
+}
+
+function SignInForm() {
   const router = useRouter();
+  const nextPath = safeNext(useSearchParams().get("next"));
   const { session, signIn } = useSession();
   const toast = useToast();
   const [email, setEmail] = useState("");
@@ -18,8 +24,8 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (session) router.replace("/dashboard");
-  }, [session, router]);
+    if (session) router.replace(nextPath ?? "/dashboard");
+  }, [session, router, nextPath]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +43,7 @@ export default function SignInPage() {
       return;
     }
     toast({ title: "Welcome back", description: "Signed in successfully.", variant: "success" });
-    router.push("/dashboard");
+    router.push(nextPath ?? "/dashboard");
   };
 
   return (
@@ -100,10 +106,18 @@ export default function SignInPage() {
 
       <p className="mt-8 text-center text-sm text-ink-2">
         New to Aria Hub?{" "}
-        <Link href="/signup" className="font-semibold text-accent-ink hover:underline">
+        <Link href={nextPath ? `/signup?next=${encodeURIComponent(nextPath)}` : "/signup"} className="font-semibold text-accent-ink hover:underline">
           Create an account
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignInForm />
+    </Suspense>
   );
 }

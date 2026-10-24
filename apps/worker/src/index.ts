@@ -7,6 +7,8 @@ import { flagExpiringTokens, refreshExpiringTokens } from "@aria/providers-core"
 import { workerConfig } from "./config.js";
 import { openDatabase, processPublishJob, processReconcileJob } from "./pipeline/publish.js";
 import { claimJobs, heartbeat, jobOutcome, LEASE_MS, type ClaimedJob } from "./pipeline/jobs.js";
+import { runMaintenance } from "./maintenance.js";
+import { ingestMetrics } from "./metrics.js";
 
 const logger = pino({ level: workerConfig.LOG_LEVEL, base: { service: "aria-worker" } });
 
@@ -80,6 +82,28 @@ async function main() {
   const monitorTimer = setInterval(monitor, 30 * 60_000);
   setTimeout(monitor, 30_000);
 
+  const maintenance = async () => {
+    try {
+      const result = await runMaintenance(handle.db);
+      logger.info(result, "maintenance");
+    } catch (err) {
+      logger.error({ err }, "maintenance failed");
+    }
+  };
+  const maintenanceTimer = setInterval(maintenance, 24 * 3_600_000);
+  setTimeout(maintenance, 5 * 60_000);
+
+  const metrics = async () => {
+    try {
+      const captured = await ingestMetrics(handle.db, (msg, meta) => logger.warn(meta ?? {}, msg));
+      if (captured) logger.info({ captured }, "metrics ingested");
+    } catch (err) {
+      logger.error({ err }, "metrics ingestion failed");
+    }
+  };
+  const metricsTimer = setInterval(metrics, 60 * 60_000);
+  setTimeout(metrics, 2 * 60_000);
+
   // Liveness for the container healthcheck: the claim loop must have ticked recently.
   const health = createServer((req, res) => {
     const healthy = Date.now() - lastLoopAt < 30_000 && !stopping;
@@ -95,6 +119,8 @@ async function main() {
     stopping = true;
     logger.info({ signal, inFlight: inFlight.size }, "shutting down — finishing in-flight jobs");
     clearInterval(monitorTimer);
+    clearInterval(maintenanceTimer);
+    clearInterval(metricsTimer);
     health.close();
     // Unfinished jobs keep their lease and are recovered by the next worker.
     await Promise.race([Promise.allSettled(inFlight.values()), new Promise((r) => setTimeout(r, 25_000))]);

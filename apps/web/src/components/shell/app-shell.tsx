@@ -457,6 +457,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onOpenPalette={() => setPaletteOpen(true)} onOpenMobileNav={() => setMobileNav(true)} />
+        <EmailVerificationBanner />
         <main className="min-w-0 flex-1 pb-20 lg:pb-0">{children}</main>
       </div>
 
@@ -494,5 +495,33 @@ function MobileTab({ href, label, icon: Icon }: { href: string; label: string; i
       <Icon className="size-5" />
       {label}
     </Link>
+  );
+}
+
+/** API mode: nudges unverified accounts to confirm their email, with a resend action. */
+function EmailVerificationBanner() {
+  const { session } = useSession();
+  const toast = useToast();
+  const [sending, setSending] = useState(false);
+  if (DATA_MODE !== "api" || !session || session.user.emailVerified !== false) return null;
+  const resend = async () => {
+    setSending(true);
+    try {
+      const { sessionApi } = await import("@/lib/api/session");
+      await sessionApi.resendVerification();
+      toast({ title: "Confirmation email sent", description: `Check ${session.user.email}.`, variant: "success" });
+    } catch (err) {
+      toast({ title: "Couldn't send the email", description: (err as Error).message, variant: "error" });
+    } finally {
+      setSending(false);
+    }
+  };
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-warn-soft px-4 py-2 text-[13px] text-warn-ink sm:px-6">
+      <span>Confirm your email address ({session.user.email}) to keep your account secure.</span>
+      <button type="button" onClick={resend} disabled={sending} className="font-semibold underline-offset-2 hover:underline disabled:opacity-60">
+        {sending ? "Sending…" : "Resend link"}
+      </button>
+    </div>
   );
 }

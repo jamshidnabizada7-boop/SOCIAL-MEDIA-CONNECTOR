@@ -33,8 +33,11 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     setData(null);
-    analyticsService.overview(range).then(setData);
-  }, [range]);
+    analyticsService
+      .overview(range)
+      .then(setData)
+      .catch((err: Error) => toast({ title: "Couldn't load analytics", description: err.message, variant: "error" }));
+  }, [range, toast]);
 
   const series = useMemo(() => (data ? data.series.map((p) => ({ date: p.date, value: p[metric] })) : []), [data, metric]);
 
@@ -52,6 +55,43 @@ export default function AnalyticsPage() {
   }
 
   const live = data.mode === "live";
+
+  /** CSV of the visible period: one row per day, then one per network. */
+  const exportCsv = () => {
+    const esc = (v: unknown) => {
+      const text = v === null || v === undefined ? "" : String(v);
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const lines = [
+      live ? "date,posts_published,engagements" : "date,impressions,engagements",
+      ...data.series.map((p) => [p.date, p.impressions, p.engagements].map(esc).join(",")),
+      "",
+      "network,account,posts_published,impressions,engagements,likes,comments,shares,clicks",
+      ...data.byNetwork.map((n) =>
+        [
+          PROVIDERS[n.provider].name,
+          n.accountName,
+          (n as { published?: number }).published ?? "",
+          n.metrics.impressions,
+          n.metrics.engagements,
+          n.metrics.likes,
+          n.metrics.comments,
+          n.metrics.shares,
+          n.metrics.clicks,
+        ]
+          .map(esc)
+          .join(",")
+      ),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `aria-hub-analytics-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Analytics exported", variant: "success" });
+  };
   const stat = (label: string, value: number | null, delta: number, spark: number[]) => (
     <Card className="flex items-center justify-between p-4">
       <div>
@@ -82,7 +122,7 @@ export default function AnalyticsPage() {
                 { value: "90d", label: "90 days" },
               ]}
             />
-            <Button variant="secondary" size="sm" onClick={() => toast({ title: "Export started", description: "A CSV will download shortly.", variant: "info" })}>
+            <Button variant="secondary" size="sm" onClick={exportCsv}>
               <Download className="size-4" /> Export
             </Button>
           </>
@@ -92,9 +132,9 @@ export default function AnalyticsPage() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {stat(live ? "Posts published" : "Impressions", live ? data.series.reduce((a, p) => a + p.impressions, 0) : data.overview.impressions, data.deltas.impressions, data.series.slice(-14).map((p) => p.impressions))}
           {!live && stat("Engagements", data.overview.engagements, data.deltas.engagements, data.series.slice(-14).map((p) => p.engagements))}
-          {stat("Total followers", data.overview.followers, data.deltas.followers, data.series.slice(-14).map((p) => Math.round(p.impressions * 12.4)))}
+          {stat("Total followers", data.overview.followers, data.deltas.followers, live ? [] : data.series.slice(-14).map((p) => Math.round(p.impressions * 12.4)))}
           {!live && stat("Link clicks", data.overview.clicks, data.deltas.clicks, data.series.slice(-14).map((p) => Math.round(p.engagements * 0.6)))}
-          {live && stat("Engagements", null, 0, data.series.slice(-14).map(() => 0))}
+          {live && stat("Engagements", data.overview.engagements, data.deltas.engagements, data.series.slice(-14).map((p) => p.engagements))}
         </div>
 
         <Card>
@@ -117,9 +157,9 @@ export default function AnalyticsPage() {
           />
           <div className="p-5">
             {live ? (
-              <p className="rounded-lg border border-info/25 bg-info-soft p-3 text-[13px] leading-relaxed text-info-ink">
-                Impression and engagement counts arrive once provider analytics ingestion is approved for your connected apps.
-                Delivery data below is live.
+              <p className="mb-4 rounded-lg border border-info/25 bg-info-soft p-3 text-[13px] leading-relaxed text-info-ink">
+                Engagement (likes, replies, reposts, views) is collected automatically every few hours for Mastodon, Bluesky and
+                YouTube. Other networks report it once their analytics permissions are approved. Delivery data is live.
               </p>
             ) : null}
             <AreaChart points={series} height={220} formatValue={(n) => formatNumber(n)} />
@@ -143,13 +183,20 @@ export default function AnalyticsPage() {
             />
             <div className="px-5 py-2">
               <BarList
-                rows={data.byNetwork.map((n) => ({
-                  label: PROVIDERS[n.provider].name,
-                  icon: <ProviderBadge provider={n.provider} size="xs" />,
-                  value: live ? n.metrics.impressions ?? 0 : n.metrics.impressions,
-                  display: n.metrics.impressions === null ? "N/A" : formatNumber(n.metrics.impressions),
-                  color: PROVIDERS[n.provider].color,
-                }))}
+                rows={data.byNetwork.map((n) => {
+                  const published = (n as { published?: number }).published ?? 0;
+                  return {
+                    label: PROVIDERS[n.provider].name,
+                    icon: <ProviderBadge provider={n.provider} size="xs" />,
+                    value: live ? published : n.metrics.impressions,
+                    display: live
+                      ? `${formatNumber(published)} posts${n.metrics.engagements === null ? "" : ` · ${formatNumber(n.metrics.engagements)} engagements`}`
+                      : n.metrics.impressions === null
+                        ? "N/A"
+                        : formatNumber(n.metrics.impressions),
+                    color: PROVIDERS[n.provider].color,
+                  };
+                })}
               />
               <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">
                 Bluesky and Mastodon don&apos;t expose impression counts through their APIs — engagement totals are still collected.
@@ -157,7 +204,7 @@ export default function AnalyticsPage() {
             </div>
           </Card>
 
-          {!live && (
+          {(!live || data.topPosts.length > 0) && (
           <Card>
             <CardHeader title="Top posts" description="Best performers in this period." />
             <ul className="divide-y">

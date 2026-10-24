@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { PROVIDER_LIST } from "@/lib/providers";
 import { ProviderBadge } from "@/components/ui/status";
+import { DATA_MODE } from "@/lib/api/client";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -25,7 +26,15 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <div className="w-full max-w-sm">{children}</div>
         </div>
         <p className="text-center text-[13px] text-ink-3">
-          Interface prototype — no data leaves your browser.
+          {DATA_MODE === "mock" ? (
+            "Interface prototype — no data leaves your browser."
+          ) : (
+            <>
+              <Link href="/legal/privacy" className="hover:underline">Privacy</Link>
+              {" · "}
+              <Link href="/legal/terms" className="hover:underline">Terms</Link>
+            </>
+          )}
         </p>
       </div>
 

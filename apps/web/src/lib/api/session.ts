@@ -1,6 +1,11 @@
 "use client";
 
-import { apiGet, apiPost } from "./client";
+import { API_URL, apiFetch, apiGet, apiPost } from "./client";
+
+export interface NotificationPrefs {
+  failures: boolean;
+  reauth: boolean;
+}
 
 export interface ApiUser {
   id: string;
@@ -40,6 +45,38 @@ export const sessionApi = {
   },
   async logout(): Promise<void> {
     await apiPost("/v1/auth/logout");
+  },
+  async updateProfile(patch: { name?: string; notificationPrefs?: Partial<NotificationPrefs> }): Promise<{ notificationPrefs: NotificationPrefs }> {
+    return apiFetch<{ notificationPrefs: NotificationPrefs }>("/v1/auth/me", { method: "PATCH", body: JSON.stringify(patch) });
+  },
+  async notificationPrefs(): Promise<NotificationPrefs> {
+    const res = await apiGet<{ notificationPrefs: NotificationPrefs }>("/v1/auth/me");
+    return res.notificationPrefs;
+  },
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await apiPost("/v1/auth/change-password", { currentPassword, newPassword });
+  },
+  async deleteAccount(password: string): Promise<void> {
+    await apiFetch("/v1/auth/me", { method: "DELETE", body: JSON.stringify({ password }) });
+  },
+  async deleteWorkspace(workspaceId: string): Promise<void> {
+    await apiFetch(`/v1/workspaces/${workspaceId}`, { method: "DELETE" });
+  },
+  /** Downloads the workspace export through the browser (cookie-authenticated). */
+  async downloadExport(workspaceId: string): Promise<void> {
+    const res = await fetch(`${API_URL}/v1/workspaces/${workspaceId}/export`, { credentials: "include" });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new Error(body.error?.message ?? "Export failed.");
+    }
+    const blob = await res.blob();
+    const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "aria-hub-export.json";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
   },
   async createWorkspace(name: string, timezone: string): Promise<void> {
     await apiPost("/v1/workspaces", { name, timezone });
