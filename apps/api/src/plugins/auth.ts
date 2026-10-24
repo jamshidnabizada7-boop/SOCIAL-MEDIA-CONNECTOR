@@ -4,7 +4,7 @@ import { and, eq, isNull, lt } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Role } from "@aria/shared-types";
 import { roleHasPermission, type Permission } from "@aria/shared-types";
-import { SESSION_COOKIE, SESSION_TTL_DAYS } from "../config.js";
+import { config, SESSION_COOKIE, SESSION_TTL_DAYS } from "../config.js";
 import { generateSessionToken } from "@aria/db";
 
 export interface SessionedUser {
@@ -42,13 +42,22 @@ export async function createSession(
   await db
     .delete(sessions)
     .where(and(eq(sessions.userId, userId), lt(sessions.expiresAt, new Date())));
-  reply.setCookie(SESSION_COOKIE, token, {
+  reply.setCookie(SESSION_COOKIE, token, { ...sessionCookieOptions(), expires: expiresAt });
+}
+
+/**
+ * Lax keeps the cookie off cross-site subrequests; the web app and API must
+ * therefore share a site (same registrable domain). SESSION_COOKIE_DOMAIN
+ * scopes it to a parent domain when they are on sibling subdomains.
+ */
+function sessionCookieOptions() {
+  return {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    secure: config.NODE_ENV === "production",
     path: "/",
-    expires: expiresAt,
-  });
+    ...(config.SESSION_COOKIE_DOMAIN ? { domain: config.SESSION_COOKIE_DOMAIN } : {}),
+  };
 }
 
 export async function destroySession(app: FastifyInstance, req: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -56,7 +65,7 @@ export async function destroySession(app: FastifyInstance, req: FastifyRequest, 
   if (token) {
     await app.database.db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
   }
-  reply.clearCookie(SESSION_COOKIE, { path: "/" });
+  reply.clearCookie(SESSION_COOKIE, sessionCookieOptions());
 }
 
 /** Populates req.user from the session cookie (no-op when absent/expired). */
@@ -113,7 +122,10 @@ export function requireWorkspacePermission(app: FastifyInstance, permission?: Pe
         .select({ workspaceId: workspaceMembers.workspaceId })
         .from(workspaceMembers)
         .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-        .where(and(eq(workspaceMembers.userId, req.user.id), isNull(workspaces.deletedAt)))
+        .where(
+          and(eq(workspaceMembers.userId, req.user.id), eq(workspaceMembers.status, "active"), isNull(workspaces.deletedAt))
+        )
+        .orderBy(workspaceMembers.joinedAt)
         .limit(1);
       if (!first[0]) {
         return reply.status(404).send({ error: { code: "not_found", message: "Workspace not found." } });
@@ -128,7 +140,8 @@ export function requireWorkspacePermission(app: FastifyInstance, permission?: Pe
       .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, req.user.id)))
       .limit(1);
     const membership = rows[0];
-    if (!membership || membership.wsDeleted) {
+    // Invited-but-not-accepted members get no access (indistinguishable from non-members).
+    if (!membership || membership.wsDeleted || membership.status !== "active") {
       return reply.status(404).send({ error: { code: "not_found", message: "Workspace not found." } });
     }
     if (permission && !roleHasPermission(membership.role, permission)) {

@@ -5,9 +5,11 @@ import {
   postMedia,
   workspaceMembers,
 } from "@aria/db";
+import { verifyMediaSignature } from "@aria/db";
 import { checksumOf, defaultStorage, detectMime, inspectImage } from "@aria/media-core";
 import { requireWorkspacePermission } from "../../plugins/auth.js";
 import { writeAudit } from "../../lib/audit.js";
+import { checkStorageLimit } from "../../lib/limits.js";
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB per file (per-request cap)
 
@@ -55,6 +57,9 @@ export function registerMediaRoutes(app: FastifyInstance): void {
       if (existing[0]) {
         return reply.status(200).send({ media: existing[0], deduplicated: true });
       }
+
+      const limit = await checkStorageLimit(db, workspaceId, bytes.byteLength);
+      if (limit) return reply.status(402).send({ error: limit });
 
       // Inspection (images get real dimensions).
       let width: number | undefined;
@@ -122,7 +127,8 @@ export function registerMediaRoutes(app: FastifyInstance): void {
       .where(
         and(
           eq(workspaceMembers.workspaceId, asset.workspaceId),
-          eq(workspaceMembers.userId, req.user.id)
+          eq(workspaceMembers.userId, req.user.id),
+          eq(workspaceMembers.status, "active")
         )
       )
       .limit(1);
@@ -135,6 +141,33 @@ export function registerMediaRoutes(app: FastifyInstance): void {
         .header("Content-Type", asset.detectedMime)
         .header("Content-Length", buffer.byteLength)
         .header("Cache-Control", "private, max-age=86400, immutable")
+        .send(buffer);
+    } catch {
+      return reply.status(404).send({ error: { code: "not_found", message: "Media content missing." } });
+    }
+  });
+
+  /**
+   * Expiring public URL for providers that fetch media themselves (Instagram,
+   * Threads). The worker signs `exp`/`sig` with a key derived from
+   * ARIA_ENCRYPTION_KEY; nothing else can mint one.
+   */
+  app.get("/v1/media/:mediaId/public", async (req, reply) => {
+    const { mediaId } = req.params as { mediaId: string };
+    const { exp, sig } = req.query as { exp?: string; sig?: string };
+    if (!verifyMediaSignature(mediaId, exp, sig)) {
+      return reply.status(403).send({ error: { code: "invalid_signature", message: "This media link is invalid or has expired." } });
+    }
+    const asset = (await db.select().from(mediaAssets).where(eq(mediaAssets.id, mediaId)).limit(1))[0];
+    if (!asset?.storageKey) {
+      return reply.status(404).send({ error: { code: "not_found", message: "Media not found." } });
+    }
+    try {
+      const buffer = await storage.read(asset.storageKey);
+      return reply
+        .header("Content-Type", asset.detectedMime)
+        .header("Content-Length", buffer.byteLength)
+        .header("Cache-Control", "public, max-age=3600")
         .send(buffer);
     } catch {
       return reply.status(404).send({ error: { code: "not_found", message: "Media content missing." } });
@@ -197,7 +230,7 @@ export function registerMediaRoutes(app: FastifyInstance): void {
         });
       }
       await db.delete(mediaAssets).where(eq(mediaAssets.id, mediaId));
-      if (asset.storageKey) await defaultStorage().remove(asset.storageKey);
+      if (asset.storageKey) await storage.remove(asset.storageKey);
       await writeAudit(db, {
         workspaceId,
         actorUserId: req.user!.id,

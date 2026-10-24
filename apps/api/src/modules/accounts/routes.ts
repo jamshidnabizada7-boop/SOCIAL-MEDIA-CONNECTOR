@@ -46,8 +46,8 @@ export function registerAccountRoutes(app: FastifyInstance): void {
   /** Health sweep: flags tokens expiring within 7 days. */
   app.post(
     "/v1/workspaces/:workspaceId/accounts/health-check",
-    { preHandler: requireWorkspacePermission(app) },
-    async (req, reply) => {
+    { preHandler: requireWorkspacePermission(app, "connect_accounts") },
+    async (_req, reply) => {
       const flipped = await flagExpiringTokens(db);
       return reply.send({ flagged: flipped });
     }
@@ -58,7 +58,17 @@ export function registerAccountRoutes(app: FastifyInstance): void {
     "/v1/workspaces/:workspaceId/accounts/:accountId/refresh",
     { preHandler: requireWorkspacePermission(app, "connect_accounts") },
     async (req, reply) => {
-      const { accountId } = req.params as { accountId: string };
+      const { workspaceId, accountId } = req.params as { workspaceId: string; accountId: string };
+      const owned = (
+        await db
+          .select({ id: socialAccounts.id })
+          .from(socialAccounts)
+          .where(and(eq(socialAccounts.id, accountId), eq(socialAccounts.workspaceId, workspaceId)))
+          .limit(1)
+      )[0];
+      if (!owned) {
+        return reply.status(404).send({ error: { code: "not_found", message: "Account not found." } });
+      }
       try {
         const cred = await resolveAccessToken(db, accountId);
         return reply.send({

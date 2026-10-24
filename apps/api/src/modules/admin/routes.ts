@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { providerHealthState } from "@aria/db";
 import type { ProviderId } from "@aria/shared-types";
 import { PROVIDERS } from "@aria/shared-types";
+import { writeAudit } from "../../lib/audit.js";
 
 /**
  * Admin provider-health endpoints (plan §64/§65): circuit-breaker state per
@@ -52,6 +53,13 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       .update(providerHealthState)
       .set({ consecutiveFailures: 0, circuitOpenUntil: null, updatedAt: new Date() })
       .where(eq(providerHealthState.providerId, provider));
+    await writeAudit(db, {
+      actorUserId: req.user!.id,
+      action: "admin.circuit_reset",
+      targetType: "provider",
+      targetId: provider,
+      ip: req.ip,
+    });
     return reply.send({ ok: true });
   });
 }

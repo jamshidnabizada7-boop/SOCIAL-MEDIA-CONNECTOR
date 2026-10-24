@@ -3,7 +3,9 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
-import { config, isProd } from "./config.js";
+import helmet from "@fastify/helmet";
+import { assertEncryptionKey } from "@aria/db";
+import { config, isProd, trustProxySetting } from "./config.js";
 import { openAppDatabase } from "./plugins/db.js";
 import { sessionHook } from "./plugins/auth.js";
 import { registerAuthRoutes } from "./modules/auth/routes.js";
@@ -20,7 +22,13 @@ import { registerQueueRoutes } from "./modules/queue/routes.js";
 import { registerAnalyticsRoutes } from "./modules/analytics/routes.js";
 import { registerBillingRoutes } from "./modules/billing/routes.js";
 
+/** Unsafe methods must come from an allowed origin (CSRF defense on top of SameSite=Lax). */
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 export async function buildServer() {
+  // Fail at boot, not on the first OAuth connect, when the key is missing or malformed.
+  if (isProd) assertEncryptionKey();
+
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,
@@ -34,9 +42,16 @@ export async function buildServer() {
         censor: "[redacted]",
       },
     },
-    trustProxy: true,
+    trustProxy: trustProxySetting() as boolean,
   });
 
+  await app.register(helmet, {
+    // JSON API: no HTML is served, so a locked-down CSP costs nothing.
+    contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+    // Media is embedded by the web app on another origin.
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    hsts: isProd ? { maxAge: 31_536_000, includeSubDomains: true } : false,
+  });
   await app.register(cookie);
   await app.register(multipart, {
     limits: { fileSize: 50 * 1024 * 1024, files: 1 },
@@ -56,7 +71,24 @@ export async function buildServer() {
   });
   await openAppDatabase(app);
 
-  app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, req, reply) => {
+  app.addHook("onRequest", async (req, reply) => {
+    if (!UNSAFE_METHODS.has(req.method)) return;
+    // Provider webhooks are server-to-server and signature-verified instead.
+    if (req.url.startsWith("/v1/webhooks/")) return;
+    // Requests without the session cookie can't ride on a user's session.
+    if (!req.headers.cookie?.includes("aria_session=")) return;
+    const origin = req.headers.origin ?? (req.headers.referer ? new URL(req.headers.referer).origin : undefined);
+    if (origin && !allowedOrigins.includes(origin)) {
+      return reply.status(403).send({ error: { code: "bad_origin", message: "Request blocked: unexpected origin." } });
+    }
+  });
+
+  app.setErrorHandler((error: Error & { statusCode?: number; code?: string; cause?: { code?: string } }, req, reply) => {
+    // Postgres 22P02: a malformed id (e.g. not a uuid) in the path — nothing can match it.
+    const pgCode = error.code ?? error.cause?.code;
+    if (pgCode === "22P02") {
+      return reply.status(404).send({ error: { code: "not_found", message: "Not found." } });
+    }
     if (error.statusCode && error.statusCode < 500) {
       return reply.status(error.statusCode).send({
         error: { code: error.code ?? "request_error", message: error.message },

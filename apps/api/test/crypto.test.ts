@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
  * ARIA_ENCRYPTION_KEY set — it generates one for the test run.
  */
 beforeAll(() => {
-  process.env.ARIA_ENCRYPTION_KEY ??= "3f2a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c";
+  process.env.ARIA_ENCRYPTION_KEY ??= "3f2a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a";
 });
 
 describe("credential encryption", () => {

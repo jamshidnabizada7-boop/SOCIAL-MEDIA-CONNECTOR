@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 // The vault requires a key; tests use a fixed one (never a real secret).
-process.env.ARIA_ENCRYPTION_KEY ??= "3f2a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c";
+process.env.ARIA_ENCRYPTION_KEY ??= "3f2a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a";
 
 import {
   createPkcePair,

@@ -1,5 +1,5 @@
 import { auditLogs } from "@aria/db";
-import type { AriaDatabase } from "@aria/db";
+import type { DbOrTx } from "@aria/db";
 
 export interface AuditInput {
   workspaceId?: string | null;
@@ -18,7 +18,7 @@ export interface AuditInput {
  * Append-only audit trail. Never log secrets — callers must not include
  * tokens, passwords or raw provider payloads.
  */
-export async function writeAudit(db: AriaDatabase, input: AuditInput): Promise<void> {
+export async function writeAudit(db: DbOrTx, input: AuditInput): Promise<void> {
   await db.insert(auditLogs).values({
     workspaceId: input.workspaceId ?? null,
     actorUserId: input.actorUserId ?? null,

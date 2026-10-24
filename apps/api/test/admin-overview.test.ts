@@ -18,7 +18,7 @@ const dataDir = path.resolve(process.cwd(), `.test-data/admin-${Date.now()}`);
 
 beforeAll(async () => {
   process.env.ARIA_DATA_DIR = dataDir;
-  process.env.ARIA_ENCRYPTION_KEY ??= "3f2a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c";
+  process.env.ARIA_ENCRYPTION_KEY ??= "3f2a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a";
   const probe = await createDatabase({ dataDir });
   await migratePglite(probe.db as never, { migrationsFolder: migrationsFolder() });
   await probe.db.insert(plans).values({ id: "free", name: "Free", maxBrands: 1, maxMembers: 1, storageGb: 1 }).onConflictDoNothing();

@@ -156,6 +156,8 @@ export const publishJobs = pgTable(
     maxAttempts: integer("max_attempts").notNull().default(5),
     lockedBy: text("locked_by"),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
+    /** A claimed (active) job whose lease lapsed belongs to a crashed worker and is re-claimed by the sweep. */
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
     lastError: text("last_error"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

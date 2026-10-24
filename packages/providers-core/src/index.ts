@@ -1,4 +1,5 @@
 export * from "./http.js";
+export * from "./net-guard.js";
 export * from "./config.js";
 export * from "./oauth.js";
 export * from "./bluesky.js";

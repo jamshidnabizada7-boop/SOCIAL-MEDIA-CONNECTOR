@@ -29,6 +29,10 @@ export const users = pgTable(
     avatarHue: integer("avatar_hue").notNull().default(200),
     isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
     status: userStatus("status").notNull().default("active"),
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    /** Consecutive failed sign-ins; reset on success. Drives temporary lockout. */
+    failedLoginCount: integer("failed_login_count").notNull().default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
     lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -51,6 +55,26 @@ export const sessions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("sessions_user_idx").on(t.userId)]
+);
+
+/**
+ * Single-use, expiring tokens mailed to a user (password reset, email
+ * verification). Only the sha256 digest is stored.
+ */
+export const userTokens = pgTable(
+  "user_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(), // password_reset | email_verify
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("user_tokens_user_idx").on(t.userId, t.purpose)]
 );
 
 /* -------------------------- Plans & entitlements ------------------------- */
@@ -136,6 +160,29 @@ export const workspaceMembers = pgTable(
     unique("workspace_members_unique").on(t.workspaceId, t.userId),
     index("workspace_members_user_idx").on(t.userId),
   ]
+);
+
+/**
+ * Email invitations. Membership is only created when the invitee accepts
+ * with the mailed token while signed in with the invited email.
+ */
+export const invitations = pgTable(
+  "invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: memberRole("role").notNull().default("editor"),
+    tokenHash: text("token_hash").notNull().unique(),
+    invitedBy: uuid("invited_by").references(() => users.id, { onDelete: "set null" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("invitations_workspace_idx").on(t.workspaceId), index("invitations_email_idx").on(t.email)]
 );
 
 export const brands = pgTable("brands", {

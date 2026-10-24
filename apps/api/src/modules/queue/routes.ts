@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { posts, publishJobs, publishTargets, queueSlots } from "@aria/db";
@@ -6,6 +6,9 @@ import type { AriaDatabase } from "@aria/db";
 import type { ProviderId } from "@aria/shared-types";
 import { requireWorkspacePermission } from "../../plugins/auth.js";
 import { writeAudit } from "../../lib/audit.js";
+import { checkScheduledPostLimit } from "../../lib/limits.js";
+
+const TERMINAL_TARGET_STATES: string[] = ["published", "failed", "canceled", "token_expired", "needs_user_action"];
 
 /**
  * Computes the next open queue window (UTC) shared by the post's destination
@@ -132,29 +135,45 @@ export function registerQueueRoutes(app: FastifyInstance): void {
     { preHandler: requireWorkspacePermission(app, "publish_posts") },
     async (req, reply) => {
       const { workspaceId, postId } = req.params as { workspaceId: string; postId: string };
-      const post = (await db.select().from(posts).where(eq(posts.id, postId)).limit(1))[0];
-      if (!post || post.workspaceId !== workspaceId) {
+      const post = (
+        await db.select().from(posts).where(and(eq(posts.id, postId), eq(posts.workspaceId, workspaceId))).limit(1)
+      )[0];
+      if (!post) {
         return reply.status(404).send({ error: { code: "not_found", message: "Post not found." } });
+      }
+      if (post.state === "published" || post.state === "processing") {
+        return reply.status(409).send({ error: { code: "already_publishing", message: "This post is already published or in flight." } });
+      }
+      if (post.state !== "scheduled") {
+        const limit = await checkScheduledPostLimit(db, workspaceId);
+        if (limit) return reply.status(402).send({ error: limit });
       }
       const targets = await db.select().from(publishTargets).where(eq(publishTargets.postId, postId));
       const providers = [...new Set(targets.map((t) => t.providerId))] as ProviderId[];
       const slot = await nextQueueSlot(db, workspaceId, providers, Date.now());
       const when = slot?.at ?? new Date(Date.now() + 24 * 3600_000);
 
-      await db
-        .update(posts)
-        .set({ scheduledAt: when, state: "scheduled", updatedAt: new Date() })
-        .where(eq(posts.id, postId));
-      for (const t of targets) {
-        if (["published", "failed", "canceled", "token_expired", "needs_user_action"].includes(t.state)) continue;
-        await db
-          .update(publishTargets)
-          .set({ scheduledAt: when, updatedAt: new Date() })
-          .where(eq(publishTargets.id, t.id));
-        await db
-          .insert(publishJobs)
-          .values({ targetId: t.id, state: "delayed", runAt: when, queue: "publish" });
-      }
+      await db.transaction(async (tx) => {
+        await tx
+          .update(posts)
+          .set({ scheduledAt: when, state: "scheduled", updatedAt: new Date() })
+          .where(eq(posts.id, postId));
+        const live = targets.filter((t) => !TERMINAL_TARGET_STATES.includes(t.state));
+        if (live.length > 0) {
+          // Retire earlier jobs so the post fires once, at the new time.
+          await tx
+            .update(publishJobs)
+            .set({ state: "dead_letter", lastError: "requeued", updatedAt: new Date() })
+            .where(and(inArray(publishJobs.targetId, live.map((t) => t.id)), inArray(publishJobs.state, ["pending", "delayed"])));
+        }
+        for (const t of live) {
+          await tx
+            .update(publishTargets)
+            .set({ state: "pending", scheduledAt: when, updatedAt: new Date() })
+            .where(eq(publishTargets.id, t.id));
+          await tx.insert(publishJobs).values({ targetId: t.id, state: "delayed", runAt: when, queue: "publish" });
+        }
+      });
       await writeAudit(db, {
         workspaceId,
         actorUserId: req.user!.id,

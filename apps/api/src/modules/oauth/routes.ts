@@ -1,4 +1,4 @@
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AriaDatabase } from "@aria/db";
@@ -7,13 +7,17 @@ import {
   oauthStates,
   socialAccounts,
   workspaceMembers,
+  workspaces,
 } from "@aria/db";
 import { encryptSecret } from "@aria/db";
 import type { ProviderId } from "@aria/shared-types";
 import { PROVIDERS, roleHasPermission } from "@aria/shared-types";
 import {
   appBaseUrl,
+  assertPublicHost,
   blueskyCreateSession,
+  normalizeInstance,
+  UnsafeHostError,
   buildAuthorizeUrl,
   exchangeCodeForTokens,
   DEFAULT_BLUESKY_INSTANCE,
@@ -24,6 +28,7 @@ import {
 } from "@aria/providers-core";
 import { requireAuth } from "../../plugins/auth.js";
 import { writeAudit } from "../../lib/audit.js";
+import { checkChannelLimit } from "../../lib/limits.js";
 
 const STATE_TTL_MS = 10 * 60_000;
 const SUPPORTED: ProviderId[] = [
@@ -31,7 +36,7 @@ const SUPPORTED: ProviderId[] = [
   "instagram",
   "threads",
   "linkedin",
-  "tiktok",
+  // "tiktok" — OAuth works but there is no publishing adapter yet; re-enable with the adapter.
   "youtube",
   "x",
   "pinterest",
@@ -39,8 +44,10 @@ const SUPPORTED: ProviderId[] = [
   "mastodon",
 ];
 
+const workspaceRef = z.union([z.string().uuid(), z.literal("current")]);
+
 const authorizeQuery = z.object({
-  workspaceId: z.string().uuid(),
+  workspaceId: workspaceRef,
   brandId: z.string().uuid().optional(),
   instance: z.string().optional(),
   /** json → returns {url, state} for SPA handling instead of a 302. */
@@ -48,7 +55,7 @@ const authorizeQuery = z.object({
 });
 
 const blueskyConnectSchema = z.object({
-  workspaceId: z.string().uuid(),
+  workspaceId: workspaceRef,
   brandId: z.string().uuid().optional(),
   handle: z.string().min(3),
   appPassword: z.string().min(8),
@@ -62,17 +69,40 @@ function webRedirect(path: string): string {
   return `${base}${path}`;
 }
 
+/** Resolves "current" (the caller's first active workspace) to an id. */
+async function resolveWorkspaceId(db: AriaDatabase, ref: string, userId: string): Promise<string | null> {
+  if (ref !== "current") return ref;
+  const first = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+    .where(and(eq(workspaceMembers.userId, userId), eq(workspaceMembers.status, "active"), isNull(workspaces.deletedAt)))
+    .orderBy(workspaceMembers.joinedAt)
+    .limit(1);
+  return first[0]?.workspaceId ?? null;
+}
+
 async function requireConnectPermission(
   db: AriaDatabase,
   workspaceId: string,
   userId: string
 ): Promise<boolean> {
   const member = await db
-    .select({ role: workspaceMembers.role })
+    .select({ role: workspaceMembers.role, status: workspaceMembers.status, deletedAt: workspaces.deletedAt })
     .from(workspaceMembers)
+    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
     .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)))
     .limit(1);
-  return !!member[0] && roleHasPermission(member[0].role, "connect_accounts");
+  const m = member[0];
+  return !!m && m.status === "active" && !m.deletedAt && roleHasPermission(m.role, "connect_accounts");
+}
+
+/** Normalizes a user-supplied server URL and refuses private/internal hosts. */
+async function safeInstance(input: string | undefined): Promise<string | undefined> {
+  if (!input) return undefined;
+  const normalized = normalizeInstance(input);
+  await assertPublicHost(normalized);
+  return normalized;
 }
 
 export function registerOauthRoutes(app: FastifyInstance): void {
@@ -93,10 +123,19 @@ export function registerOauthRoutes(app: FastifyInstance): void {
     if (!parsed.success) {
       return reply.status(400).send({ error: { code: "invalid_input", message: "workspaceId is required." } });
     }
-    const { workspaceId, brandId, instance, format } = parsed.data;
-    if (!(await requireConnectPermission(db, workspaceId, req.user!.id))) {
+    const { brandId, format } = parsed.data;
+    const workspaceId = await resolveWorkspaceId(db, parsed.data.workspaceId, req.user!.id);
+    if (!workspaceId || !(await requireConnectPermission(db, workspaceId, req.user!.id))) {
       return reply.status(403).send({ error: { code: "forbidden", message: "You cannot connect accounts in this workspace." } });
     }
+    let instance: string | undefined;
+    try {
+      instance = await safeInstance(parsed.data.instance);
+    } catch (err) {
+      return reply.status(400).send({ error: { code: "invalid_instance", message: (err as Error).message } });
+    }
+    const limit = await checkChannelLimit(db, workspaceId);
+    if (limit) return reply.status(402).send({ error: limit });
     if (provider === "bluesky") {
       return reply.status(400).send({
         error: { code: "use_app_password", message: "Bluesky connects with an app password: POST /v1/accounts/bluesky/connect." },
@@ -177,12 +216,32 @@ export function registerOauthRoutes(app: FastifyInstance): void {
 
       const accounts = [profile, ...(profile.extra ?? [])];
       const metaProvider = provider === "facebook" || provider === "instagram" || provider === "threads";
+      let skippedForLimit = 0;
       for (const p of accounts) {
         // Facebook: p.accessToken is the Page token (the only token that can
         // publish to the Page). Other providers use the grant token directly.
         const accountToken = p.accessToken ?? grant.accessToken;
-        const accountExpiresAt =
-          metaProvider && p.accessToken ? new Date(Date.now() + 45 * 86_400_000) : expiresAt;
+        // Page tokens minted from a long-lived user token don't expire; Meta
+        // invalidates them on password change/app removal, which publishing
+        // surfaces as needs_reauth.
+        const accountExpiresAt = metaProvider && p.accessToken ? null : expiresAt;
+        const already = (
+          await db
+            .select({ id: socialAccounts.id })
+            .from(socialAccounts)
+            .where(
+              and(
+                eq(socialAccounts.workspaceId, stored.workspaceId),
+                eq(socialAccounts.providerId, provider),
+                eq(socialAccounts.externalAccountId, p.externalAccountId)
+              )
+            )
+            .limit(1)
+        )[0];
+        if (!already && (await checkChannelLimit(db, stored.workspaceId))) {
+          skippedForLimit++;
+          continue;
+        }
         await db
           .insert(socialAccounts)
           .values({
@@ -255,10 +314,13 @@ export function registerOauthRoutes(app: FastifyInstance): void {
           userAgent: req.headers["user-agent"],
         });
       }
-      return reply.redirect(webRedirect(`/accounts?connected=${provider}`));
+      return reply.redirect(
+        webRedirect(`/accounts?connected=${provider}${skippedForLimit ? `&skipped=${skippedForLimit}&reason=plan_limit` : ""}`)
+      );
     } catch (err) {
       const message = (err as Error).message ?? "Connection failed";
-      req.log.warn({ provider, reason: message, body: (err as { body?: string }).body }, "oauth_callback_failed");
+      // Provider response bodies are deliberately not logged: they can echo tokens or personal data.
+      req.log.warn({ provider, reason: message, status: (err as { status?: number }).status }, "oauth_callback_failed");
       await writeAudit(db, {
         actorType: "system",
         action: "account.connect_failed",
@@ -280,15 +342,21 @@ export function registerOauthRoutes(app: FastifyInstance): void {
     if (!parsed.success) {
       return reply.status(400).send({ error: { code: "invalid_input", message: "Handle and app password are required." } });
     }
-    const { workspaceId, brandId, handle, appPassword, instance } = parsed.data;
-    if (!(await requireConnectPermission(db, workspaceId, req.user!.id))) {
+    const { brandId, handle, appPassword } = parsed.data;
+    const workspaceId = await resolveWorkspaceId(db, parsed.data.workspaceId, req.user!.id);
+    if (!workspaceId || !(await requireConnectPermission(db, workspaceId, req.user!.id))) {
       return reply.status(403).send({ error: { code: "forbidden", message: "You cannot connect accounts in this workspace." } });
     }
+    let instanceUrl: string;
     try {
-      const session = await blueskyCreateSession(handle, appPassword, {
-        instanceUrl: instance ?? DEFAULT_BLUESKY_INSTANCE,
-      });
-      const instanceUrl = instance ?? DEFAULT_BLUESKY_INSTANCE;
+      instanceUrl = (await safeInstance(parsed.data.instance)) ?? DEFAULT_BLUESKY_INSTANCE;
+    } catch (err) {
+      return reply.status(400).send({ error: { code: "invalid_instance", message: (err as Error).message } });
+    }
+    const limit = await checkChannelLimit(db, workspaceId);
+    if (limit) return reply.status(402).send({ error: limit });
+    try {
+      const session = await blueskyCreateSession(handle, appPassword, { instanceUrl });
       const displayHandle = `@${session.handle}`;
       await db
         .insert(socialAccounts)
@@ -370,9 +438,12 @@ export function registerOauthRoutes(app: FastifyInstance): void {
     const { instance } = req.query as { instance?: string };
     if (!instance) return reply.status(400).send({ error: { code: "invalid_input", message: "instance is required." } });
     try {
-      const info = await mastodonInstanceInfo(instance);
+      const info = await mastodonInstanceInfo((await safeInstance(instance))!);
       return reply.send({ instance: info });
-    } catch {
+    } catch (err) {
+      if (err instanceof UnsafeHostError) {
+        return reply.status(400).send({ error: { code: "invalid_instance", message: err.message } });
+      }
       return reply.status(400).send({ error: { code: "instance_unreachable", message: "That instance could not be reached." } });
     }
   });

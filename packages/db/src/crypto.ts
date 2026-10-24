@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,13 +44,33 @@ function ensureKey(): string {
   return process.env.ARIA_ENCRYPTION_KEY;
 }
 
+/**
+ * Parses a 32-byte key given as 64 hex chars or base64. Anything else is
+ * rejected: hashing a weak passphrase into a key would hide misconfiguration.
+ */
+export function parseEncryptionKey(raw: string): Buffer {
+  const value = raw.trim();
+  if (/^[0-9a-fA-F]{64}$/.test(value)) return Buffer.from(value, "hex");
+  if (/^[A-Za-z0-9+/]{43}=?$/.test(value)) {
+    const asBase64 = Buffer.from(value, "base64");
+    if (asBase64.length === 32) return asBase64;
+  }
+  throw new Error(
+    "ARIA_ENCRYPTION_KEY must be 32 bytes as 64 hex characters or base64. Generate one with: openssl rand -hex 32"
+  );
+}
+
+let cachedKey: { raw: string; key: Buffer } | undefined;
+
 function keyFromEnv(): Buffer {
   const raw = ensureKey();
-  if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex");
-  const asBase64 = Buffer.from(raw, "base64");
-  if (asBase64.length === 32) return asBase64;
-  // Fallback: derive a stable key from the provided secret.
-  return createHash("sha256").update(raw).digest();
+  if (cachedKey?.raw !== raw) cachedKey = { raw, key: parseEncryptionKey(raw) };
+  return cachedKey.key;
+}
+
+/** Fails fast at boot instead of on the first OAuth connect. */
+export function assertEncryptionKey(): void {
+  keyFromEnv();
 }
 
 export function encryptSecret(plaintext: string): string {
@@ -85,4 +105,32 @@ export function hashToken(token: string): string {
 
 export function generateSessionToken(): string {
   return randomBytes(32).toString("hex");
+}
+
+/* ----------------------------- Signed URLs ------------------------------ */
+
+/** Sub-key for URL signing, so signatures never reuse the encryption key directly. */
+function signingKey(): Buffer {
+  return createHmac("sha256", keyFromEnv()).update("aria-media-url-v1").digest();
+}
+
+function mediaSignature(mediaId: string, expiresAtSec: number): string {
+  return createHmac("sha256", signingKey()).update(`${mediaId}.${expiresAtSec}`).digest("base64url");
+}
+
+/**
+ * Query string for an expiring public media URL. Instagram and Threads fetch
+ * media from a public URL, so the worker hands them one of these.
+ */
+export function signMediaQuery(mediaId: string, ttlSec = 3600): string {
+  const exp = Math.floor(Date.now() / 1000) + ttlSec;
+  return `exp=${exp}&sig=${mediaSignature(mediaId, exp)}`;
+}
+
+export function verifyMediaSignature(mediaId: string, exp: string | undefined, sig: string | undefined): boolean {
+  const expSec = Number(exp);
+  if (!sig || !Number.isInteger(expSec) || expSec < Date.now() / 1000) return false;
+  const expected = Buffer.from(mediaSignature(mediaId, expSec));
+  const given = Buffer.from(sig);
+  return expected.length === given.length && timingSafeEqual(expected, given);
 }

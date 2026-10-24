@@ -29,11 +29,11 @@ export function registerNotificationRoutes(app: FastifyInstance): void {
     "/v1/workspaces/:workspaceId/notifications/:notificationId/read",
     { preHandler: requireWorkspacePermission(app) },
     async (req, reply) => {
-      const { notificationId } = req.params as { notificationId: string };
+      const { workspaceId, notificationId } = req.params as { workspaceId: string; notificationId: string };
       await db
         .update(notifications)
         .set({ readAt: new Date() })
-        .where(eq(notifications.id, notificationId));
+        .where(and(eq(notifications.id, notificationId), eq(notifications.workspaceId, workspaceId)));
       return reply.send({ ok: true });
     }
   );

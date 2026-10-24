@@ -1,7 +1,9 @@
 process.env.ARIA_ADAPTER_MODE = "mock";
-process.env.ARIA_ENCRYPTION_KEY ??= "3f2a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c";
+process.env.ARIA_ENCRYPTION_KEY ??= "3f2a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDatabase, encryptSecret, type DatabaseHandle } from "@aria/db";
+import { rmSync } from "node:fs";
+import path from "node:path";
+import { createDatabase, encryptSecret, runMigrations, type DatabaseHandle } from "@aria/db";
 import {
   brands,
   oauthCredentials,
@@ -31,6 +33,7 @@ import type { PublishJobPayload } from "../src/pipeline/publish.js";
  */
 
 const stamp = Date.now().toString(36);
+const dataDir = path.resolve(process.cwd(), `.test-data/pipeline-${Date.now()}`);
 
 describe("publish pipeline", () => {
   let handle: DatabaseHandle;
@@ -41,7 +44,9 @@ describe("publish pipeline", () => {
   let ttAccountId: string;
 
   beforeAll(async () => {
-    handle = await createDatabase();
+    // Isolated database: migrations + reference data (plans, providers).
+    handle = await createDatabase({ dataDir });
+    await runMigrations(handle);
     const db = handle.db;
     // Fixtures: user → workspace → brand → account.
     const [user] = await db
@@ -77,11 +82,11 @@ describe("publish pipeline", () => {
     await db
       .insert(oauthCredentials)
       .values({ accountId, accessTokenEnc: encryptSecret(`test-token-${stamp}`), scopes: [] });
-  });
-
+  }, 60_000);
 
   afterAll(async () => {
     await handle.close();
+    rmSync(dataDir, { recursive: true, force: true });
   });
 
   let fixtureCounter = 0;

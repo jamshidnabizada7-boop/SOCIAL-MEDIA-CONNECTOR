@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { assertSafeUrlShape } from "./net-guard.js";
 import type { ProviderId } from "@aria/shared-types";
 import type { AriaDatabase } from "@aria/db";
 import { fetchJson, postForm, type FetchLike } from "./http.js";
@@ -254,5 +255,7 @@ export function normalizeInstance(input: string): string {
   if (url.pathname !== "/" && url.pathname !== "") {
     throw new Error("Instance URL must be the server root (e.g. https://mastodon.social)");
   }
+  if (url.username || url.password) throw new Error("Instance URL must not contain credentials");
+  assertSafeUrlShape(url);
   return `${url.protocol}//${url.host}`;
 }

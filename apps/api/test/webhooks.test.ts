@@ -30,7 +30,7 @@ function signedBody(payload: Record<string, unknown>): { body: string; signature
 
 beforeAll(async () => {
   process.env.ARIA_DATA_DIR = dataDir;
-  process.env.ARIA_ENCRYPTION_KEY ??= "3f2a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c";
+  process.env.ARIA_ENCRYPTION_KEY ??= "3f2a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a8c9e1b7d5f4a";
   process.env.WEBHOOK_SECRET_TIKTOK = SECRET;
   const probe = await createDatabase({ dataDir });
   await migratePglite(probe.db as never, { migrationsFolder: migrationsFolder() });

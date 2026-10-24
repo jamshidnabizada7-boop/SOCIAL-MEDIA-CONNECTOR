@@ -6,8 +6,14 @@ import * as schema from "./schema/index.js";
 
 export * from "./schema/index.js";
 export * from "./crypto.js";
+export { runMigrations } from "./migrations.js";
+export { seedReferenceData, PLANS } from "./seed-data.js";
 
 export type AriaDatabase = NodePgDatabase<typeof schema>;
+/** A transaction handle from `db.transaction(async (tx) => …)`. */
+export type AriaTransaction = Parameters<Parameters<AriaDatabase["transaction"]>[0]>[0];
+/** Helpers that may run inside or outside a transaction accept either. */
+export type DbOrTx = AriaDatabase | AriaTransaction;
 /** Union preserved for driver-specific escape hatches. */
 export type AnyAriaDatabase = NodePgDatabase<typeof schema> | PgliteDatabase<typeof schema>;
 export type DatabaseDriver = "postgres" | "pglite";
