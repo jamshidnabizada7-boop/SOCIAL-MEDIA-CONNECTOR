@@ -4,10 +4,11 @@ A social publishing app with a Next.js web UI, Fastify API and Postgres-backed
 publishing worker. Connect accounts, upload media, compose per-network variants,
 publish now or schedule, and follow each destination independently.
 
-**Current handoff:** Claude committed readiness phases 0–3 and left phase 4 in
-progress. The resumed work finishes the local operations tooling and adds
-verification. Production deployment and platform approvals still require external
-setup. See [the current handoff](docs/PROJECT-STATUS.md) and
+**Current handoff:** The resumed work is deployed on Oracle at
+[app.myariahub.com](https://app.myariahub.com). Container/restore/public browser
+checks pass and nightly local backups are enabled. SMTP, offsite backup/alerts,
+legal operator details and real-platform approvals/testing still need setup.
+See [the current handoff](docs/PROJECT-STATUS.md) and
 [the readiness plan](docs/PRODUCTION-READINESS-PLAN.md).
 
 ## Repository

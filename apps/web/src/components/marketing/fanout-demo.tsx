@@ -18,7 +18,7 @@ const DEMO_TARGETS: { provider: ProviderId; delay: number; async?: boolean }[] =
   { provider: "linkedin", delay: 1300 },
   { provider: "threads", delay: 1700 },
   { provider: "youtube", delay: 2100, async: true },
-  { provider: "tiktok", delay: 2600, async: true },
+  { provider: "pinterest", delay: 2600, async: true },
 ];
 
 export function FanoutDemo() {

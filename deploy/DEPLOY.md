@@ -2,8 +2,10 @@
 
 The target stack is one public hostname routed through a **named Cloudflare
 Tunnel → Caddy → web/API**, with Postgres 16 and a publishing worker on the VPS.
-The older `/opt/aria-hub` installation and existing Vercel project are independent;
-these files do not alter either service. Nothing in this handoff has been deployed.
+The Social Media Connector is deployed at `/opt/ariahub-v2` on Oracle. The older
+`/opt/aria-hub` installation and existing Vercel project are independent and were
+not changed. Oracle's named tunnel runs under `ariahub-v2-tunnel.service` and
+routes both `app.myariahub.com` and `api.myariahub.com` to Caddy on port 18080.
 
 ## Prerequisites and first installation
 
@@ -127,14 +129,32 @@ before removal. See rclone's [listing](https://rclone.org/commands/rclone_lsf/) 
 [purge semantics](https://rclone.org/commands/rclone_purge/). Set `BACKUP_KEEP_DAYS` in the host environment too if changing
 retention (the offsite script does not source `.env`).
 
-Install this entry in root's crontab after a successful first backup/offsite copy:
+On the existing Oracle host, the supplied systemd timer is installed and enabled.
+It takes local snapshots daily at 03:00 UTC (08:00 Asia/Karachi), catches missed
+runs after reboot, and records failures in the service journal:
+
+```sh
+sudo install -m 644 deploy/ariahub-v2-backup.service deploy/ariahub-v2-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ariahub-v2-backup.timer
+sudo systemctl start ariahub-v2-backup.service
+sudo systemctl show ariahub-v2-backup.service -p Result -p ExecMainStatus
+sudo journalctl -u ariahub-v2-backup.service --no-pager -n 30
+```
+
+This timer currently performs local backups only. Once offsite credentials are
+configured and a manual copy succeeds, add an offsite-copy service or an
+`ExecStartPost` override. Configure external failure/freshness notifications.
+
+On another host using cron instead, use this entry after successful backup/offsite
+verification. Use only one scheduler:
 
 ```cron
 0 3 * * * cd /opt/ariahub-v2 && sh deploy/backup-stack.sh >> /var/log/ariahub-backup.log 2>&1 && sh deploy/backup-offsite.sh >> /var/log/ariahub-backup.log 2>&1
 ```
 
-This is 03:00 in the VPS time zone. Configure a backup-job failure/freshness alert;
-cron, rclone credentials and remote alerting are operator setup steps.
+The cron alternative runs at 03:00 in that host's time zone. Rclone credentials
+and remote alerting remain operator setup steps.
 
 ## Restore
 
@@ -207,6 +227,11 @@ emergency reset is possible by reconnecting every social account and re-entering
 every provider credential after switching the key; it loses existing credentials.
 
 ## Tunnel restart and monitoring
+
+On the existing Oracle installation, use
+`sudo systemctl restart ariahub-v2-tunnel.service` and
+`sudo journalctl -u ariahub-v2-tunnel.service --no-pager -n 30`.
+For installations using the Compose tunnel profile instead:
 
 ```sh
 sudo docker compose -f deploy/docker-compose.prod.yml --env-file .env --profile tunnel restart cloudflared

@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly Aria Hub v2 local recovery snapshot
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+Unit=ariahub-v2-backup.service
+
+[Install]
+WantedBy=timers.target

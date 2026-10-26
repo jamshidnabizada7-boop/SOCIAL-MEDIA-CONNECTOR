@@ -1,7 +1,8 @@
 # Project handoff — 26 October 2026
 
-**The main application is implemented. Local verification passes; production
-launch is still waiting on deployment validation and external setup.**
+**The application is deployed on Oracle at https://app.myariahub.com.
+Container, restore, public health and browser checks pass. Email, offsite backup,
+monitoring and real-platform acceptance still need external setup.**
 
 ## Where Claude stopped
 
@@ -18,7 +19,7 @@ Claude left uncommitted phase-4 changes to Docker/Compose, manifests, the lockfi
 and backup/deploy scripts. Those changes were continued in place. No original
 work was discarded. The first continuation was local only. The user then
 explicitly authorized validation and deployment to the existing Oracle VPS;
-that continuation is now in progress. Provider apps and the separate ARIA HUB
+the first verified release was `b53879a`. Provider apps and the separate ARIA HUB
 installation are outside this deployment.
 
 ## Completed in this continuation
@@ -63,6 +64,14 @@ installation are outside this deployment.
 - Fixed Alpine/BusyBox tar's empty-upload backup case and verified it in the
   production recovery snapshot. Preserved pre-upgrade source, environment,
   database/media snapshots and old image tags on Oracle before replacement.
+- Upgraded the existing Oracle stack, preserving its domains, systemd tunnel,
+  encryption key, two users and connected account. API, worker and web now run
+  as non-root with healthy checks; existing account/app credentials decrypt.
+- Installed and ran `ariahub-v2-backup.timer`: local snapshots at 03:00 UTC
+  (08:00 Asia/Karachi), 14-day retention. Offsite copying is not configured.
+- Removed temporary build cache while retaining rollback images and snapshots.
+- Corrected public network counts/TikTok advertising and the claim that app
+  passwords never reach the service; credentials are stored encrypted.
 
 ## Verification evidence
 
@@ -84,6 +93,9 @@ installation are outside this deployment.
 | Compose and GitHub Actions YAML | Parsed locally |
 | Real PostgreSQL backup/recovery | Passed on PostgreSQL 18.6 in a temporary Ubuntu cluster: seven migrations, 35 tables, relationships, records and media, two restores from a copied snapshot |
 | Oracle ARM64 Docker / PostgreSQL 16 stack | Passed in an isolated stack: both images built, migrations/health checks passed, database/media backup restored, worker stayed paused, test volumes removed |
+| Live Oracle application | API/worker/web healthy; both public domains return healthy responses; browser sign-in UI, local form validation and same-origin authentication routing pass |
+| Existing data/credentials | Two users, two media records, zero posts preserved; one account credential and one provider configuration decrypt successfully |
+| Local scheduled backup | systemd timer enabled; first production backup succeeded; next runs at 03:00 UTC daily |
 
 The load result measures local PGlite with simulated provider latency; it is not a
 production throughput promise. Browser testing exercises real provider adapter
@@ -93,21 +105,21 @@ delivery have not been verified with external accounts.
 
 ## Remaining before a public launch
 
-1. **Deploy the validated release and confirm public health.** Oracle ARM64
-   container/restore validation has passed; preserve the existing named tunnel,
-   encryption key, database and accounts during the authorized upgrade.
-2. **Configure the permanent domain and named tunnel.** Set the single public
-   origin, production encryption key/database secret, legal operator details and
-   provider redirect URLs. This continuation did not deploy or change the
-   existing Oracle/Vercel installations.
-3. **Configure SMTP and confirm real email delivery.** Configure and test Stripe
+1. **Configure SMTP and confirm real email delivery.** Configure and test Stripe
    only if launching paid plans; free operation does not require Stripe.
-4. **Configure offsite storage, nightly backup cron, uptime/error/backup alerts.**
+2. **Fill legal operator/contact details and review provider redirect URLs.** The
+   existing public domains/tunnel and production encryption key are preserved.
+3. **Configure offsite storage and uptime/error/backup alerts.** Local nightly
+   backups already run under systemd; rclone and Sentry remain unconfigured.
    Restore a downloaded offsite snapshot into a separate stack and keep the
    encryption key recovery material separately.
-5. **Enable only approved/tested networks.** Bluesky and Mastodon need no central
+4. **Enable only approved/tested networks.** Bluesky and Mastodon need no central
    app approval. Meta/Google/LinkedIn/Pinterest/X need their access/approval/budget
    requirements completed. TikTok remains intentionally disabled.
+5. **Re-upload the two older logo assets.** Their database records existed but
+   files were already absent from the old container and media volume before this
+   upgrade. No replacement files were fabricated; records remain intact. New
+   uploads now use the persistent shared `/data/storage` directory.
 6. **Run live acceptance tests and a small soft launch.** Verify each enabled
    network with a real test account, confirm public media access/cookies/callbacks,
    finish deployment security review and monitor a few users for 1–2 weeks.
@@ -119,8 +131,8 @@ no bulk re-encryption CLI; do not replace the key blindly.
 
 ## Next local session
 
-Use Node 24 and `npm ci`, then `npm run build:packages`. The fastest continuation
-is to run the new CI/container job on a Docker-capable machine and address any
-image/runtime issues it finds. Read this handoff before using older architecture
-or status notes; the old table counts, mock-backend claims and quick-tunnel
-instructions were stale and have been replaced.
+Use Node 24 and `npm ci`, then `npm run build:packages`. The next launch work is
+SMTP/legal configuration, offsite backup/alerts and real-network acceptance.
+For Oracle deploys, preserve the systemd tunnel with `ARIA_TUNNEL_MODE=external`.
+The live code revision is recorded in `/opt/ariahub-v2/REVISION`; pre-upgrade
+recovery material is in `backups/recovery-before-20261026T133133Z` on that host.

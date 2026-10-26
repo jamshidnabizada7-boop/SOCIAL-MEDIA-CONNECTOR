@@ -337,6 +337,8 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
 };
 
 export const PROVIDER_LIST: ProviderInfo[] = Object.values(PROVIDERS);
+/** Public marketing lists only implemented publishing adapters. */
+export const PUBLISHING_PROVIDER_LIST = PROVIDER_LIST.filter((provider) => provider.id !== "tiktok");
 
 export function providerName(id: ProviderId): string {
   return PROVIDERS[id]?.name ?? id;

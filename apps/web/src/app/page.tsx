@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PROVIDER_LIST } from "@/lib/providers";
+import { PUBLISHING_PROVIDER_LIST } from "@/lib/providers";
 import { PLAN_OFFERS } from "@/lib/services/workspace";
 import { ProviderBadge } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
@@ -65,7 +65,7 @@ const FEATURES = [
 const STEPS = [
   {
     title: "Connect your accounts",
-    body: "Authorize once through the official sign-in of each network. No passwords ever touch Aria Hub.",
+    body: "Connect through each network’s sign-in flow or supported app password. Connection credentials are stored encrypted.",
   },
   {
     title: "Compose once",
@@ -152,9 +152,9 @@ export default function LandingPage() {
       <section className="border-y bg-surface">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-8 gap-y-4 px-5 py-7">
           <p className="w-full text-center text-[13px] font-medium text-ink-3 sm:w-auto">
-            Ten networks, one composer
+            {PUBLISHING_PROVIDER_LIST.length} networks, one composer
           </p>
-          {PROVIDER_LIST.map((p) => (
+          {PUBLISHING_PROVIDER_LIST.map((p) => (
             <span key={p.id} className="inline-flex items-center gap-2 text-sm font-medium text-ink-2">
               <ProviderBadge provider={p.id} size="sm" />
               {p.name}
@@ -167,7 +167,7 @@ export default function LandingPage() {
       <section id="features" className="mx-auto max-w-6xl px-5 py-20">
         <div className="max-w-2xl">
           <h2 className="font-display text-3xl font-bold tracking-tight">
-            The complexity of ten APIs, hidden behind one button
+            Each network&apos;s requirements, handled in one place
           </h2>
           <p className="mt-3 text-[15px] leading-relaxed text-ink-2">
             Every network has its own rules — caption lengths, media ratios, privacy requirements,

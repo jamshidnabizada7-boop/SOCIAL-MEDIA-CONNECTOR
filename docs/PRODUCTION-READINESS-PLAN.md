@@ -66,10 +66,11 @@ backup and deployment changes for phase 4. Those changes were continued in place
 - [x] Runbook covers deployment, rollback, restore, tunnel restart and key-rotation limitations.
 - [x] Run the Docker build/stack/real pg_dump+pg_restore smoke test on Oracle in an isolated stack; worker remains paused after restore.
 - [x] Build/test on the actual Oracle ARM64 target architecture.
-- [ ] Provision the permanent domain/tunnel and set production secrets/SMTP/operator details.
-- [ ] Configure rclone/cron, copy a backup off-server, and prove a restore from that downloaded copy in a separate stack.
+- [x] Preserve and verify Oracle's permanent domains, systemd tunnel and production encryption/database secrets.
+- [x] Enable nightly local backups under systemd at 03:00 UTC; first run succeeded.
+- [ ] Configure SMTP/operator details, rclone/offsite storage, and prove a restore from a downloaded offsite copy in a separate stack.
 - [ ] Configure external uptime monitoring, Sentry notification rules and backup freshness/failure notifications.
-- [ ] Deploy the reviewed code and confirm production health. No live infrastructure has been changed in this run.
+- [x] Deploy to `/opt/ariahub-v2` on Oracle and confirm API/worker/web health; preserve the separate `/opt/aria-hub` services.
 
 ## Phase 5 — External platform access
 
@@ -93,6 +94,8 @@ implemented HTTP clients as evidence of approval for other users.
 - [x] Deployment/backup/restore locking, failure recovery, rollback revision and external-tunnel regression checks.
 - [x] Load test: 1,000 due posts, two workers, four concurrent jobs each; no duplicate claims/provider calls; completed-job replay checked.
 - [x] Browser flow on the standalone production web server: signup, fixture account connect, image upload, schedule, worker delivery, live status and reload without a duplicate.
+- [x] Public Oracle browser sign-in/form validation/API routing and preserved credential decryption checks.
+- [ ] Re-upload two legacy logo files already missing before deployment; their metadata was preserved.
 - [ ] Real production restore and provider-account smoke tests.
 - [ ] Soft launch with a few users and monitor for 1–2 weeks before public launch.
 

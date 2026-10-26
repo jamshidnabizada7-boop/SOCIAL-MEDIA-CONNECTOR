@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PROVIDER_LIST } from "@/lib/providers";
+import { PUBLISHING_PROVIDER_LIST } from "@/lib/providers";
 import { ProviderBadge } from "@/components/ui/status";
 import { DATA_MODE } from "@/lib/api/client";
 
@@ -48,7 +48,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <p className="font-display text-[26px] font-bold leading-snug tracking-tight">
             One caption in.
             <br />
-            Ten networks out.
+            {PUBLISHING_PROVIDER_LIST.length} networks out.
           </p>
           <p className="mt-3 max-w-md text-[15px] leading-relaxed text-ink-2">
             Aria Hub checks each network&apos;s rules before you publish, shows you a preview per
@@ -89,15 +89,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         <div className="relative">
           <div className="flex flex-wrap gap-2.5">
-            {PROVIDER_LIST.slice(0, 8).map((p) => (
+            {PUBLISHING_PROVIDER_LIST.map((p) => (
               <span key={p.id} className="inline-flex items-center gap-1.5 rounded-full border bg-surface px-2.5 py-1 text-[12px] font-medium text-ink-2">
                 <ProviderBadge provider={p.id} size="xs" />
                 {p.name}
               </span>
             ))}
-            <span className="inline-flex items-center rounded-full border bg-surface px-2.5 py-1 text-[12px] font-medium text-ink-3">
-              +2 more
-            </span>
           </div>
         </div>
       </div>
