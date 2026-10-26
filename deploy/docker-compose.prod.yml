@@ -1,8 +1,30 @@
 name: ariahub-v2
 
-# Production stack: new dedicated Postgres (v2, independent of any other
-# install), API, publishing worker, and web. API + web bind to loopback only —
-# public exposure happens via a Cloudflare tunnel (outbound, no open ports).
+# Production stack. Everything binds to loopback; public HTTPS arrives through
+# a named Cloudflare Tunnel (outbound-only, no open ports) into Caddy, which
+# serves the web app and the API from ONE host so the session cookie stays
+# first-party.
+#
+#   cd /opt/ariahub-v2
+#   sudo docker compose -f deploy/docker-compose.prod.yml --env-file .env --profile tunnel up -d --build
+#
+# Secrets and optional settings (SMTP, Stripe, provider apps…) come from
+# /opt/ariahub-v2/.env — see deploy/env.production.example.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://${POSTGRES_USER:-aria}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-ariahub}
+  ARIA_ENCRYPTION_KEY: ${ARIA_ENCRYPTION_KEY:?ARIA_ENCRYPTION_KEY is required}
+  APP_BASE_URL: ${APP_BASE_URL:?APP_BASE_URL is required}
+  WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN is required}
+  # Uploads must live on the shared volume so the worker can read them.
+  ARIA_STORAGE_DIR: /data/storage
 
 services:
   postgres:
@@ -19,47 +41,64 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+    logging: *logging
 
-  api:
+  # One-shot: applies migrations and reference data before api/worker start.
+  migrate:
+    image: ${ARIA_APP_IMAGE:-ariahub-v2-app:latest}
     build:
       context: ..
       dockerfile: deploy/api.Dockerfile
-    restart: unless-stopped
+    command: ["node", "--import", "tsx", "packages/db/src/migrate.ts"]
+    environment: *app-env
     depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
+    logging: *logging
+
+  api:
+    image: ${ARIA_APP_IMAGE:-ariahub-v2-app:latest}
+    restart: unless-stopped
+    init: true
+    env_file: ../.env
     environment:
-      NODE_ENV: production
+      <<: *app-env
       PORT: 4100
       HOST: 0.0.0.0
-      DATABASE_URL: postgres://${POSTGRES_USER:-aria}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ariahub}
-      ARIA_ENCRYPTION_KEY: ${ARIA_ENCRYPTION_KEY:?ARIA_ENCRYPTION_KEY is required}
-      APP_BASE_URL: ${APP_BASE_URL:?APP_BASE_URL is required}
-      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN is required}
-      ARIA_DATA_DIR: /data
+      # Caddy normalizes the Cloudflare client IP into one forwarded hop.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - media:/data
     ports:
-      - "127.0.0.1:14100:4100"
+      - "127.0.0.1:${ARIA_API_BIND_PORT:-14100}:4100"
+    logging: *logging
 
   worker:
-    build:
-      context: ..
-      dockerfile: deploy/api.Dockerfile
-    command: ["npx", "tsx", "apps/worker/src/index.ts"]
+    image: ${ARIA_APP_IMAGE:-ariahub-v2-app:latest}
+    command: ["node", "--import", "tsx", "apps/worker/src/index.ts"]
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
+    init: true
+    stop_grace_period: 40s
+    env_file: ../.env
     environment:
-      NODE_ENV: production
-      DATABASE_URL: postgres://${POSTGRES_USER:-aria}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ariahub}
-      ARIA_ENCRYPTION_KEY: ${ARIA_ENCRYPTION_KEY}
-      APP_BASE_URL: ${APP_BASE_URL}
+      <<: *app-env
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
-      ARIA_DATA_DIR: /data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - media:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4101/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    logging: *logging
 
   web:
     build:
@@ -67,14 +106,21 @@ services:
       dockerfile: deploy/web.Dockerfile
       args:
         NEXT_PUBLIC_DATA_MODE: api
-        # Same-origin deployment: the UI calls the API with relative paths on
-        # the single public host (see Caddyfile).
+        # Same-origin: the UI calls the API with relative paths (see Caddyfile).
         NEXT_PUBLIC_API_URL: ""
+        NEXT_PUBLIC_LEGAL_ENTITY: ${LEGAL_ENTITY:-}
+        NEXT_PUBLIC_CONTACT_EMAIL: ${CONTACT_EMAIL:-}
+        NEXT_PUBLIC_LEGAL_UPDATED: ${LEGAL_UPDATED:-}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     restart: unless-stopped
+    environment:
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
     depends_on:
       - api
     ports:
-      - "127.0.0.1:13000:3000"
+      - "127.0.0.1:${ARIA_WEB_BIND_PORT:-13000}:3000"
+    logging: *logging
 
   caddy:
     image: caddy:2-alpine
@@ -86,7 +132,43 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     ports:
       # 8080 belongs to the older v1 install on this host — use 18080.
-      - "127.0.0.1:18080:8080"
+      - "127.0.0.1:${ARIA_GATEWAY_BIND_PORT:-18080}:8080"
+    logging: *logging
+
+  # Named Cloudflare Tunnel: a permanent hostname (CLOUDFLARE_TUNNEL_TOKEN from
+  # the Zero Trust dashboard, public hostname → http://caddy:8080).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - caddy
+    logging: *logging
+
+  # One-shot backup; backup-stack.sh quiesces writers for a matched DB/media set.
+  # Schedule it nightly, followed by backup-offsite.sh (see DEPLOY.md).
+  backup:
+    image: postgres:16-alpine
+    profiles: ["ops"]
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-aria}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-ariahub}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ../backups:/backups
+      - media:/data:ro
+      - ./backup.sh:/backup.sh:ro
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *logging
 
 volumes:
   pgdata:

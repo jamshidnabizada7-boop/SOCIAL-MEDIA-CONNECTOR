@@ -228,7 +228,7 @@ function PostsInner() {
                         <PostStatePill state={p.state} />
                       </div>
                       <div className="hidden lg:block">
-                        <Avatar name={author === "usr_maya" ? "Maya Chen" : author === "usr_ines" ? "Inés Rojas" : author === "usr_devon" ? "Devon Park" : "Tomás Weber"} hue={200} size="sm" />
+                        <Avatar name={p.authorName ?? (author === "usr_maya" ? "Maya Chen" : author === "usr_ines" ? "Inés Rojas" : author === "usr_devon" ? "Devon Park" : "Tomás Weber")} hue={p.authorHue ?? 200} size="sm" />
                       </div>
                     </Link>
                     <div className="absolute right-3 top-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">

@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 /**
@@ -13,6 +14,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Self-contained server for the production image (deploy/web.Dockerfile).
+  output: "standalone",
+  // Monorepo: trace dependencies from the repo root (builds run in apps/web).
+  outputFileTracingRoot: path.resolve(process.cwd(), "../.."),
   async headers() {
     return [
       {

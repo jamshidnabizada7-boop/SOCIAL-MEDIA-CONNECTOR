@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "node --import tsx src/index.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -14,15 +14,16 @@
     "@aria/media-core": "^0.1.0",
     "@aria/providers-core": "*",
     "@aria/shared-types": "*",
-    "drizzle-orm": "^0.44.0",
-    "nodemailer": "^7.0.13",
+    "@sentry/node": "11.9.0",
+    "drizzle-orm": "^0.45.4",
+    "nodemailer": "^10.2.1",
     "pino": "^10.3.1",
+    "tsx": "^4.20.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/nodemailer": "^8.0.2",
-    "tsx": "^4.20.0",
     "typescript": "^5",
-    "vitest": "^3.2.0"
+    "vitest": "^5.0.5"
   }
 }

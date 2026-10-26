@@ -1,3 +1,6 @@
+export { redactTelemetryText, sanitizeTelemetryEvent } from "./telemetry.js";
+export { formatDateTimeInZone, localDateTimeToUtc } from "./scheduling.js";
+
 /**
  * Aria Hub — shared data contracts.
  *
@@ -260,6 +263,8 @@ export interface Post {
   state: PostState;
   brandId: string;
   authorId: string;
+  authorName?: string;
+  authorHue?: number;
   campaign?: string;
   labels?: string[];
   timezone: string;

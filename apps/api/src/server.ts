@@ -21,6 +21,8 @@ import { registerAdminDataRoutes } from "./modules/admin/data-routes.js";
 import { registerQueueRoutes } from "./modules/queue/routes.js";
 import { registerAnalyticsRoutes } from "./modules/analytics/routes.js";
 import { registerBillingRoutes } from "./modules/billing/routes.js";
+import { captureError, flushTelemetry } from "./lib/telemetry.js";
+import { databaseRateLimitStore } from "./lib/rate-limit-store.js";
 
 /** Unsafe methods must come from an allowed origin (CSRF defense on top of SameSite=Lax). */
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -64,12 +66,17 @@ export async function buildServer() {
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
+  await openAppDatabase(app);
   await app.register(rateLimit, {
     global: true,
     max: 300,
     timeWindow: "1 minute",
+    store: databaseRateLimitStore(app.database.db),
+    errorResponseBuilder: (_req, context) => Object.assign(
+      new Error(`Too many requests. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`),
+      { statusCode: context.statusCode, code: "rate_limited" },
+    ),
   });
-  await openAppDatabase(app);
 
   app.addHook("onRequest", async (req, reply) => {
     if (!UNSAFE_METHODS.has(req.method)) return;
@@ -95,12 +102,13 @@ export async function buildServer() {
       });
     }
     req.log.error({ err: error }, "unhandled error");
+    captureError(error, { route: req.routeOptions.url ?? "unknown", method: req.method });
     return reply.status(500).send({
       error: { code: "internal_error", message: isProd ? "Something went wrong." : error.message },
     });
   });
 
-  app.get("/health", async () => {
+  app.get("/health", { config: { rateLimit: false } }, async (_req, reply) => {
     // Deep ping so load balancers/orchestrators detect DB loss, not just process liveness.
     let db: "ok" | "error" = "error";
     try {
@@ -109,14 +117,14 @@ export async function buildServer() {
     } catch {
       /* reported below */
     }
-    return {
-      status: "ok",
+    return reply.status(db === "ok" ? 200 : 503).send({
+      status: db === "ok" ? "ok" : "unhealthy",
       service: "aria-api",
       driver: app.database.driver,
       db,
       version: process.env.npm_package_version ?? "0.1.0",
       time: new Date().toISOString(),
-    };
+    });
   });
 
   // Session resolution for every request under /v1.
@@ -142,6 +150,11 @@ export async function buildServer() {
 const isDirectRun = process.argv[1] && import.meta.url === new URL(`file://${process.argv[1].replace(/\\/g, "/")}`).href;
 if (isDirectRun || process.argv[1]?.endsWith("server.ts") || process.argv[1]?.endsWith("server.js")) {
   const app = await buildServer();
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => {
+      void app.close().then(flushTelemetry).then(() => process.exit(0));
+    });
+  }
   app
     .listen({ port: config.PORT, host: config.HOST })
     .then(() => {
@@ -149,6 +162,7 @@ if (isDirectRun || process.argv[1]?.endsWith("server.ts") || process.argv[1]?.en
     })
     .catch((err) => {
       app.log.error(err, "failed to start");
-      process.exit(1);
+      captureError(err, { stage: "startup" });
+      void flushTelemetry().finally(() => process.exit(1));
     });
 }

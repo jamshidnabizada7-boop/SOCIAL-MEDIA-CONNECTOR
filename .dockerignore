@@ -11,3 +11,5 @@
 **/.env.*
 !.env.example
 .DS_Store
+backups
+.aria-operations.lock

@@ -115,6 +115,8 @@ interface ApiPostRow {
   workspaceId: string;
   brandId?: string | null;
   authorId?: string | null;
+  authorName?: string | null;
+  authorHue?: number | null;
   campaign?: string | null;
   labels?: string[];
   timezone: string;
@@ -175,6 +177,8 @@ export class ApiPostsService implements PostsService {
       state: row.state,
       brandId: row.brandId ?? "",
       authorId: row.authorId ?? "",
+      authorName: row.authorName ?? "Workspace member",
+      authorHue: row.authorHue ?? 200,
       campaign: row.campaign ?? undefined,
       labels: row.labels ?? [],
       timezone: row.timezone,
@@ -210,7 +214,18 @@ export class ApiPostsService implements PostsService {
   async refresh(): Promise<void> {
     try {
       const res = await apiGet<{ posts: ApiPostRow[] }>("/v1/workspaces/current/posts");
-      this.cache = res.posts.map((p) => this.mapPost(p));
+      const previous = new Map(this.cache.map((p) => [p.id, p]));
+      this.cache = res.posts.map((row) => {
+        const mapped = this.mapPost(row);
+        const detail = previous.get(row.id);
+        return {
+          ...mapped,
+          // The list endpoint omits detail-only history/variants. Polling must
+          // retain those while replacing live target state and error/link data.
+          versions: row.versions ? mapped.versions : detail?.versions ?? [],
+          variants: row.variants ? mapped.variants : detail?.variants ?? [],
+        };
+      });
     } catch {
       /* keep last good cache on transient errors */
     }

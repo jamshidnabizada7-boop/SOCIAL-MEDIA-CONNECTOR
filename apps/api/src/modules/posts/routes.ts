@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
@@ -11,6 +11,7 @@ import {
   publishTargets,
   remotePosts,
   socialAccounts,
+  users,
 } from "@aria/db";
 import type { DbOrTx } from "@aria/db";
 import type { PostState, TargetState } from "@aria/shared-types";
@@ -78,8 +79,9 @@ function notFound(reply: FastifyReply, what = "Post") {
 async function findPost(db: DbOrTx, workspaceId: string, postId: string) {
   return (
     await db
-      .select()
+      .select({ ...getTableColumns(posts), authorName: users.name, authorHue: users.avatarHue })
       .from(posts)
+      .leftJoin(users, eq(users.id, posts.authorId))
       .where(and(eq(posts.id, postId), eq(posts.workspaceId, workspaceId)))
       .limit(1)
   )[0];
@@ -308,8 +310,9 @@ export function registerPostRoutes(app: FastifyInstance): void {
       const { state, limit } = req.query as { state?: PostState; limit?: string };
       const cap = Math.min(200, Math.max(1, Number(limit) || 100));
       const rows = await db
-        .select()
+        .select({ ...getTableColumns(posts), authorName: users.name, authorHue: users.avatarHue })
         .from(posts)
+        .leftJoin(users, eq(users.id, posts.authorId))
         .where(state ? and(eq(posts.workspaceId, workspaceId), eq(posts.state, state)) : eq(posts.workspaceId, workspaceId))
         .orderBy(desc(posts.updatedAt))
         .limit(cap);
@@ -317,14 +320,7 @@ export function registerPostRoutes(app: FastifyInstance): void {
       const [targets, media] = ids.length
         ? await Promise.all([
             db
-              .select({
-                id: publishTargets.id,
-                postId: publishTargets.postId,
-                accountId: publishTargets.accountId,
-                providerId: publishTargets.providerId,
-                state: publishTargets.state,
-                attempts: publishTargets.attempts,
-              })
+              .select()
               .from(publishTargets)
               .where(inArray(publishTargets.postId, ids)),
             db

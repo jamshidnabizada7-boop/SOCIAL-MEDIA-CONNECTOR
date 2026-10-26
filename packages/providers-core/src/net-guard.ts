@@ -36,11 +36,21 @@ function isPrivateV4(ip: string): boolean {
 }
 
 function isPrivateV6(ip: string): boolean {
-  const lower = ip.toLowerCase();
+  // URL normalization compresses expanded forms and converts mapped dotted
+  // addresses to hex; handle both forms before checking global-unicast space.
+  const lower = new URL(`http://[${ip}]/`).hostname.slice(1, -1).toLowerCase();
   if (lower === "::" || lower === "::1") return true;
   const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
   if (mapped) return isPrivateV4(mapped[1]);
+  const mappedHex = lower.match(/^::ffff:([\da-f]{1,4}):([\da-f]{1,4})$/);
+  if (mappedHex) {
+    const value = (parseInt(mappedHex[1], 16) * 65536) + parseInt(mappedHex[2], 16);
+    return isPrivateV4([value >>> 24, (value >>> 16) & 255, (value >>> 8) & 255, value & 255].join("."));
+  }
   return (
+    !/^[23]/.test(lower) || // only globally routable unicast (2000::/3)
+    lower.startsWith("2002:") || // 6to4 can embed a private IPv4 destination
+    lower.startsWith("2001:db8:") || // documentation-only
     lower.startsWith("fc") || // unique local fc00::/7
     lower.startsWith("fd") ||
     lower.startsWith("fe8") || // link-local fe80::/10
@@ -91,10 +101,19 @@ export async function assertPublicHost(input: string): Promise<void> {
   const host = url.hostname.replace(/^\[|\]$/g, "");
   if (isIP(host)) return; // literal already checked
   let addresses: Array<{ address: string }>;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    addresses = await lookup(host, { all: true, verbatim: true });
+    addresses = await Promise.race([
+      lookup(host, { all: true, verbatim: true }),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("DNS lookup timed out")), 5_000);
+        timer.unref();
+      }),
+    ]);
   } catch {
     throw new UnsafeHostError("That server could not be found. Check the address.");
+  } finally {
+    clearTimeout(timer);
   }
   if (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address))) {
     throw new UnsafeHostError("That server address points to a private network.");

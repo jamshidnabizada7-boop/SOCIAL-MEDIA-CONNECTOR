@@ -2,7 +2,11 @@
 	# Same-origin product: one public host serves UI and API, so the
 	# SameSite=Lax session cookie stays first-party.
 	handle /v1/* {
-		reverse_proxy api:4100
+		reverse_proxy api:4100 {
+			# Only the named tunnel/loopback reaches this listener. Cloudflare
+			# overwrites this header; do not expose this port on a public interface.
+			header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+		}
 	}
 	handle /health {
 		reverse_proxy api:4100

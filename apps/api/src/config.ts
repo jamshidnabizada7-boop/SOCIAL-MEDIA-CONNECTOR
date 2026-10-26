@@ -12,7 +12,8 @@ const envSchema = z
     /**
      * Which proxy hops to trust for client IPs (rate limiting, audit logs).
      * A hop count ("1", "2") or a comma-separated list of proxy IPs/CIDRs.
-     * Production sits behind Cloudflare → Caddy, i.e. "2". Unset trusts nothing.
+     * Caddy normalizes Cloudflare's client IP into one hop: "1" in our stack.
+     * Unset trusts nothing; review this when changing the ingress topology.
      */
     TRUST_PROXY: z.string().optional(),
     /** Cookie Domain attribute, e.g. ".example.com" when web and API share a parent domain. */

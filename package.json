@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=20"
+    "node": "^22.12.0 || >=24.0.0"
   },
   "scripts": {
     "dev:web": "npm run dev -w @aria/web",
@@ -19,7 +19,8 @@
     "dev:worker": "npm run dev -w @aria/worker",
     "build:worker": "npm run build -w @aria/worker",
     "start:worker": "npm run start -w @aria/worker",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build:packages && npm run build:api && npm run build:worker && npm run build:web",
+    "build:packages": "npm run build -w @aria/shared-types -w @aria/db -w @aria/providers-core -w @aria/media-core",
     "test": "npm run test --workspaces --if-present",
     "db:generate": "npm run generate -w @aria/db",
     "db:migrate": "npm run migrate -w @aria/db",
@@ -27,7 +28,10 @@
     "dev:db": "tsx packages/db/src/server.ts",
     "lint": "eslint apps/api apps/worker packages && npm run lint -w @aria/web",
     "typecheck": "tsc --noEmit -p apps/api && tsc --noEmit -p apps/worker && tsc --noEmit -p packages/db && tsc --noEmit -p packages/shared-types && tsc --noEmit -p packages/providers-core && tsc --noEmit -p packages/media-core",
-    "admin": "npm run admin -w @aria/db --"
+    "admin": "npm run admin -w @aria/db --",
+    "test:e2e": "playwright test",
+    "test:load": "node --import tsx scripts/load-test.mts",
+    "test:ops": "node --test scripts/ops.test.mjs"
   },
   "allowScripts": {
     "esbuild@0.18.20": true,
@@ -36,9 +40,15 @@
     "unrs-resolver@1.12.2": true
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@electric-sql/pglite-socket": "^0.2.14",
     "@eslint/js": "9.39.5",
+    "@playwright/test": "^1.61.0",
+    "drizzle-orm": "^0.45.4",
     "eslint": "9.39.5",
     "globals": "14.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "5.9.3",
     "typescript-eslint": "8.71.0"
   }
 }

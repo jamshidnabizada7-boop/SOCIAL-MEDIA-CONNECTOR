@@ -15,17 +15,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Tests
 - vitest per workspace: `npm test -w @aria/api`, or a single test with `npx vitest run test/posts-flow.test.ts` from `apps/api`.
-- Worker pipeline tests force `ARIA_ADAPTER_MODE=mock`. Real adapters aren't exercised by tests.
+- Worker unit tests force `ARIA_ADAPTER_MODE=mock`. `npm run test:e2e` exercises the real Bluesky HTTP adapter against a local fixture, not a live account.
+- `npm run test:ops` checks backup/restore/deployment failures. On Debian/Ubuntu, `pg_virtualenv -t sh scripts/postgres-backup-test.sh` validates real PostgreSQL schema/data/media recovery in a throwaway cluster.
 
 ## API conventions
 - Errors: `{ error: { code, message } }` with a user-facing message. Non-members get 404 (no existence leak); insufficient roles get 403.
 - `requireWorkspacePermission` only checks membership of `:workspaceId`. Every handler must also scope its queries by `workspaceId` (post, target, account and queue ids are not tenant-checked otherwise).
 - `:workspaceId` may be the literal `current` (resolved in `plugins/auth.ts`).
 - Provider credentials in the DB (Admin → Provider credentials) override env vars. OAuth tokens are AES-256-GCM-encrypted with `ARIA_ENCRYPTION_KEY` (dev key: `.local/encryption.key`). Never log tokens.
-- Env vars used in code but missing from `.env.example`: `APP_PUBLIC_MEDIA_BASE_URL` (Instagram/Threads), `X_POSTING_ENABLED`, `ARIA_STORAGE_DIR`, `ARIA_ADAPTER_MODE`, `LINKEDIN_API_VERSION`, `WEBHOOK_SECRET_<PROVIDER>`.
+- See `.env.example` for optional provider, storage, public-media and webhook environment variables. Do not put real credentials in tracked templates.
 
 ## Deploy
-- See `deploy/DEPLOY.md`: Oracle VPS + `deploy/docker-compose.prod.yml` behind a Cloudflare quick tunnel. The tunnel URL changes on restart, which means updating `APP_BASE_URL`, `WEB_ORIGIN`, Vercel `NEXT_PUBLIC_API_URL` and each provider's redirect URIs.
+- See `deploy/DEPLOY.md`: the prepared stack uses `deploy/docker-compose.prod.yml` behind a named Cloudflare tunnel and one permanent origin. The older Oracle/Vercel installations are separate and unchanged.
+- Host deployment/backup/restore commands share `.aria-operations.lock`. Restore leaves publishing paused until deliveries after the snapshot have been reconciled.
 - Don't touch the deployed server, Vercel or provider apps without being asked explicitly.
 
 ## Production readiness

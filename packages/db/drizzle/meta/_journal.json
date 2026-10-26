@@ -43,6 +43,13 @@
       "when": 1792841146227,
       "tag": "0005_prefs_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793003328311,
+      "tag": "0006_known_karma",
+      "breakpoints": true
     }
   ]
 }

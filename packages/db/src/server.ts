@@ -25,12 +25,15 @@ const port = Number(process.env.ARIA_PG_PORT ?? 5438);
 mkdirSync(dataDir, { recursive: true });
 console.log(`[aria-db] opening embedded postgres at ${dataDir}`);
 const client = new PGlite(dataDir);
-const server = new PGLiteSocketServer({ db: client, port, host: "127.0.0.1" });
+// API and worker each use a connection pool. The socket server defaults to ONE
+// connection, which otherwise lets the worker starve the API completely.
+const server = new PGLiteSocketServer({ db: client, port, host: "127.0.0.1", maxConnections: 32 });
 await server.start();
 console.log(`[aria-db] ready — postgres://aria:aria@127.0.0.1:${port}/ariahub`);
 
 const shutdown = async () => {
   console.log("[aria-db] shutting down");
+  await server.stop();
   await client.close();
   process.exit(0);
 };

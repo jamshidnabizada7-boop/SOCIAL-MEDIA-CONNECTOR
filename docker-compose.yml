@@ -1,13 +1,15 @@
+# Optional local Postgres matching production (16). Without it the stack uses
+# embedded PGlite. Then set DATABASE_URL=postgresql://aria:aria_local_dev@localhost:5432/ariahub
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:16-alpine
     container_name: ariahub-postgres
     environment:
       POSTGRES_USER: aria
       POSTGRES_PASSWORD: aria_local_dev
       POSTGRES_DB: ariahub
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - ariahub_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,19 +18,5 @@ services:
       timeout: 3s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    container_name: ariahub-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - ariahub_redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
 volumes:
   ariahub_pgdata:
-  ariahub_redisdata:

@@ -1,4 +1,11 @@
-import { pgTable, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, index } from "drizzle-orm/pg-core";
+
+/** Shared, restart-safe request budgets. Keys are hashes, never raw client IPs. */
+export const rateLimitBuckets = pgTable("rate_limit_buckets", {
+  key: text("key").primaryKey(),
+  hits: integer("hits").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (t) => [index("rate_limit_buckets_expiry_idx").on(t.expiresAt)]);
 
 /**
  * Circuit-breaker state per provider (plan §32). When a provider starts

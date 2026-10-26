@@ -1,147 +1,101 @@
-# Aria Hub — Production Readiness Plan
+# Production readiness — current checklist
 
-Written 2026-10-24 from a full source review. Every item marked ✅verified was confirmed by reading the code.
+Updated 2026-10-26 after resuming Claude's work. See [PROJECT-STATUS.md](PROJECT-STATUS.md)
+for the handoff and verification evidence. Checked boxes mean implemented and
+locally checked, not approved by a social platform or deployed to production.
 
-## Where things stand today
+## Recovery point
 
-| Check | Result |
-|---|---|
-| `npm run typecheck` (all 6 backend workspaces) | ✅ 0 errors |
-| `npm test` | ✅ 80 tests pass (api 30, worker 21, providers-core 19, media-core 10). `@aria/db` has no tests (now `--passWithNoTests`). |
-| `npm run build:web` | ✅ builds |
-| Backend ESLint (new) | ❌ 23 errors, all unused imports (quick cleanup) |
-| Version control | Git initialized 2026-10-24, no commits yet |
+Claude's last completed commit was `32a4e4a` (Phase 3: product completeness).
+Earlier commits cover hygiene (`ac93788`), security (`57427eb`) and publishing
+correctness (`342985e`). The working tree contained unfinished Docker, lockfile,
+backup and deployment changes for phase 4. Those changes were continued in place.
 
-**Verdict:** the code compiles and the happy-path tests pass. It is **not safe for public use yet**:
-- One customer can read or edit another customer's posts.
-- The publishing engine can double-post.
-- YouTube, Pinterest, Instagram, Threads and TikTok publishing don't actually work end to end.
+## Phase 0 — Hygiene
 
-Phases 1–2 are hard launch blockers. Phase 5 depends on platform approvals that take weeks, so **start Phase 5 paperwork today, in parallel**.
+- [x] Version control, secret/data exclusions, backend/web lint and typecheck commands.
+- [x] Dependency declarations and build order; runtime commands support raw TS packages.
+- [x] Reproducible lockfile with required Linux ARM64 native packages present.
+- [x] Root environment template is included in version control instead of ignored.
 
----
+## Phase 1 — Security foundations
 
-## Phase 0 — Hygiene (½ day)
-- [x] `git init`; `.gitignore` now covers nested `node_modules/`, `dist/`, `**/tmp/`, `apps/api/.test-data/`
-- [x] Backend ESLint config, plus `npm run lint` and `npm run typecheck` scripts
-- [x] Fix the 23 unused-import lint errors, then make the first commit
-- [x] Delete files holding secrets or debug output:
-  - `apps/api/tmp/checkcred.mts` (prints token prefixes)
-  - `packages/db/tmp/*`
-  - `.local/smoke3/c.txt` and `.local/smoke4/` cookie jars
-  - `apps/api/.test-data/` (199 MB)
-  - empty root `src/`
-- [x] `.dockerignore`: change `dist`/`node_modules` to `**/dist`, `**/node_modules`, and add `**/.test-data`, `**/tmp`
-- [x] Declare the missing deps: `@aria/providers-core` in api and worker, `zod` in worker
-- [x] Remove the duplicate `sessionHook` registration (`apps/api/src/server.ts:91` vs `modules/auth/routes.ts:24`)
+- [x] Workspace-scoped post/target/account/queue queries and cross-tenant route tests.
+- [x] Active membership, token-based invite acceptance, password reset/verification, login lockout.
+- [x] Webhook signatures over raw payloads and Meta verification handshake.
+- [x] HTTPS/private-instance checks, including mapped IPv6 private-address regression tests and DNS timeout.
+- [x] Strong production encryption key validation, security headers, explicit trusted proxies and CSRF origin checks.
+- [x] Postgres-backed atomic rate budgets shared across processes and restarts; cleanup and tests.
+- [x] Redacted logging and privacy-filtered optional error reporting.
+- [ ] Independent final security review of the actual public deployment and provider callbacks.
 
-## Phase 1 — Security blockers (2–3 days)
-1. **Cross-tenant IDOR** ✅verified. Every handler loads rows by id without `workspaceId`.
-   - Scope every query by `req.member.workspaceId` in:
-     - `apps/api/src/modules/posts/routes.ts`: get, patch, publish, schedule, cancel, retry, delete
-     - `queue/routes.ts:135`
-     - `accounts/routes.ts:63`
-   - Add a test per route: a user in workspace A requests a resource in workspace B and must get 404.
-2. **Invited members get full access** ✅verified (`plugins/auth.ts:125-140` never checks `status`).
-   - Require `status = 'active'`.
-   - Add an invite-accept endpoint with a token.
-3. **Webhooks**
-   - Register a raw-body content-type parser and verify the HMAC on the exact bytes (`webhooks/routes.ts:121`).
-   - Reject unverified payloads; don't store them.
-   - Add Meta's `GET hub.challenge` verification.
-4. **SSRF:** for Mastodon/Bluesky instance URLs (`providers-core/src/oauth.ts:250`):
-   - Require `https`.
-   - Resolve DNS and block private, loopback and link-local ranges.
-   - Set a timeout.
-5. **Encryption key**
-   - Make `ARIA_ENCRYPTION_KEY` required in production config.
-   - Reject anything that isn't 64-hex or base64-32. Don't SHA-hash weak strings (`packages/db/src/crypto.ts:52`).
-6. **Headers and proxy**
-   - Add `@fastify/helmet`.
-   - Set `trustProxy` to the Caddy/Cloudflare hop only, not `true`.
-   - Move rate limiting to Postgres or Redis so it survives restarts and multiple instances.
-   - Add login lockout.
-7. **Cookies and CSRF:** serve web and API from one site (see Phase 4) so `SameSite=Lax` works, or add a CSRF token if they stay split.
-8. **Logging:** stop logging provider error bodies in the OAuth callback (`oauth/routes.ts:261`), and audit the admin circuit reset.
+## Phase 2 — Publishing correctness
 
-## Phase 2 — Publishing engine correctness (4–6 days)
-1. **Atomic job claim.** Replace the unconditional `active` update (`pipeline/publish.ts:128`) with `UPDATE … WHERE id=$1 AND state IN ('pending','delayed') RETURNING`. A run that doesn't win the claim exits.
-2. **No double posts** ✅verified.
-   - When a job moves to `delayed`, set `runAt` to the real next time.
-   - When `createPost` returns async, insert `remote_posts` with the provider's id immediately, so idempotency holds.
-3. **Reconcile** ✅verified (`publish.ts:410-445`):
-   - Pass the decrypted credential to `getPostStatus`.
-   - Use the stored provider id, not `pending_<id>`.
-   - Handle `failed`.
-   - Use backoff (30 s, 1 m, 5 m…) with a max age, then fail with a message.
-   - Store the real permalink instead of `example.invalid`.
-4. **Stale jobs:** add a lease (`lockedUntil`). The sweep re-claims `active` jobs whose lease expired.
-5. **BullMQ:** the driver is a no-op ✅verified (`queue/bullmq.ts:48`). Decision: **delete it** and rely on the Postgres queue plus sweep, which is enough at this scale. Implement it properly only if you outgrow that.
-6. **TikTok:**
-   - Remove it from the OAuth provider list until a real adapter exists.
-   - Make `getAdapter` **throw** in production instead of falling back to the mock (`adapters/registry.ts:42`).
-7. **Per-network variants** ✅verified (nothing inserts `postVariants`):
-   - The API accepts and stores variants on create and patch.
-   - The web app sends YouTube title and Pinterest board.
-8. **Web composer** ✅verified (`apps/web/src/lib/services/backend.ts:209`): send `mediaIds`, `variants`, `scheduledAt` and `aiDisclosed`.
-9. **Media storage** ✅verified:
-   - Set `ARIA_STORAGE_DIR=/data/storage` in both api and worker (`deploy/docker-compose.prod.yml`) so they share the volume.
-   - Add a signed, expiring public media URL (`/v1/media/:id/public?sig=…`) and set `APP_PUBLIC_MEDIA_BASE_URL`. Instagram and Threads need this.
-10. **Transactions:** wrap post create (plus media ownership check), publish, schedule and cancel in `db.transaction` ✅verified (0 exist).
-11. **Token refresh**
-    - Use the existing advisory-lock helper (`apps/worker/src/tokens/refresh-lock.ts`) inside `withRefreshLock` (`providers-core/src/credentials.ts:28`).
-    - Have the connection monitor refresh proactively.
-    - Fix Threads refresh to call the Threads endpoint.
-    - Use per-provider client auth: Basic auth for Pinterest and X, `client_key` for TikTok.
-12. **Tests:** run the real-adapter path against recorded HTTP fixtures (nock/msw), and test reconcile, the claim race and stale-lease recovery.
+- [x] Conditional job claims, leases/heartbeats, stale recovery, persisted delays and duplicate guards.
+- [x] Async provider IDs stored immediately; authenticated reconciliation with backoff and terminal outcomes.
+- [x] Durable Postgres queue; removed the nonfunctional BullMQ path.
+- [x] TikTok disabled; unsupported real adapters do not fall back to fake success.
+- [x] Media, variants and AI disclosure passed from composer through API to worker.
+- [x] Signed public media URLs and shared API/worker storage.
+- [x] Transactional post/target/job changes and single-flight token refresh.
+- [x] Pipeline/client tests and 1,000-post concurrent queue verification.
+- [ ] Live delivery tests for every platform to be enabled at launch (requires real approved accounts).
 
-## Phase 3 — Product completeness (4–7 days)
-- **Email (SMTP or Resend):** password reset, email verification and email invites. Wire up the web `forgot-password` and `onboarding` pages.
-- **Seed `plans` in a migration** so production has them (`workspaces.plan_id` references `plans`).
-- **Platform admin bootstrap:** a CLI command instead of hand-written SQL.
-- **Billing:** either integrate Stripe (checkout, webhook, portal) **or** hide billing and launch free. Enforce `maxChannels`, `maxScheduledPosts`, seats and storage on the server either way.
-- **Analytics:** add scheduled pull jobs per provider, **or** hide the analytics pages for v1.
-- **Web:** remove the remaining mock-only paths in API mode (e.g. billing, `backend.ts:634`), and add error and empty states.
-- **Docs:** update the README and ARCHITECTURE (32 tables; web is no longer mock-backed; 9 adapters, not 10), and add the missing env vars to `.env.example`.
+## Phase 3 — Product completeness
 
-## Phase 4 — Infrastructure and operations (3–4 days)
-1. **Stable domain.** The quick tunnel URL changes on every restart, which breaks OAuth. Use a real domain with a **named Cloudflare Tunnel** (free), e.g. `app.<domain>` for web and `app.<domain>/v1` for the API through Caddy. One site fixes the cookie and CORS problems, so you can drop the separate Vercel copy.
-2. **Docker**
-   - Multi-stage build, non-root user, production dependencies only.
-   - Commit a lockfile that includes the linux-arm64 optional binaries (`npm install --os=linux --cpu=arm64`, or generate it in a Linux container) so `npm ci` works. Then remove `--legacy-peer-deps` and the lockfile deletion.
-   - Add a worker healthcheck.
-3. **Migrations run automatically** on deploy (a one-shot `migrate` service before api and worker).
-4. **Backups**
-   - Nightly `pg_dump` plus the media volume, copied off-box (Oracle Object Storage or R2), with 14-day retention.
-   - **Do one test restore.**
-5. **Observability**
-   - pino structured logs in the worker.
-   - Sentry (free tier) for api, worker and web.
-   - Uptime check on `/health`.
-   - Alert on failed-publish rate and on open circuit breakers.
-6. **CI (GitHub Actions):** lint, typecheck, test and build on every push. Deploy from CI, or replace the tar-over-ssh step with a script.
-7. **Runbook** in `deploy/DEPLOY.md`: deploy, rollback, restore, key rotation, tunnel restart.
+- [x] SMTP-backed reset, verification, invitations and failure/reconnect alerts.
+- [x] Plan reference data seeded on migration and platform-admin CLI.
+- [x] Stripe checkout, portal, signed billing webhook and server plan limits; free operation without Stripe.
+- [x] Analytics from real deliveries and available engagement ingestion (Bluesky/Mastodon/YouTube).
+- [x] Profile/settings/team/account/workspace lifecycle flows, legal page implementations.
+- [x] README/architecture/environment docs updated to the actual implementation.
+- [x] Selected time zone honored by scheduling, DST ambiguity/gap checks, live post-status rendering and real author names.
+- [ ] Configure real SMTP and test mail delivery; configure/test Stripe if selling paid plans.
+- [ ] Fill legal operator/contact details and review policies for the intended business/platform registrations.
 
-## Phase 5 — Platform approvals (external, 2–8 weeks; start now)
-Without these, real users other than you can't connect accounts:
+## Phase 4 — Infrastructure and operations
 
-| Platform | What's needed |
-|---|---|
-| Meta (Facebook, Instagram, Threads) | App Review for `pages_manage_posts`, `instagram_content_publish` and the `threads_*` scopes. Business verification, privacy policy URL, data-deletion callback, screencast. Also update Graph API v23 to the current version (`providers-core/src/config.ts:29`). |
-| Google (YouTube) | OAuth consent verification for `youtube.upload` (sensitive scope). A YouTube API audit if you need more than the default quota. |
-| LinkedIn | Community Management API access for organization posting. |
-| TikTok | Content Posting API audit; unaudited apps can only post privately. |
-| X | Paid API tier; set `X_POSTING_ENABLED=true` only after budgeting. |
-| Pinterest | Standard access (trial access is sandbox only). |
-| Legal | Privacy policy, terms of service and a data-deletion page on the public domain. All of the above require them. |
+- [x] Same-origin Caddy routing and optional named-tunnel service prepared.
+- [x] Multi-stage images, non-root runtimes, production backend dependencies, standalone web and healthchecks.
+- [x] One-shot migration service before API/worker and deployment script with health verification.
+- [x] Quiesced database/media backups, strict snapshot validation and whole-set retention; paused workers stay paused, partial-stop failures recover.
+- [x] Offsite copy tool that cannot erase all remote copies when the local folder is empty.
+- [x] Restore validates before downtime and leaves workers stopped for post-backup delivery reconciliation.
+- [x] Structured worker logs, optional Sentry across API/worker/web, circuit/failure-rate alerts.
+- [x] GitHub Actions for lint, types, tests, browser flow, load test, production audit and container smoke test.
+- [x] Runbook covers deployment, rollback, restore, tunnel restart and key-rotation limitations.
+- [x] Run the Docker build/stack/real pg_dump+pg_restore smoke test on Oracle in an isolated stack; worker remains paused after restore.
+- [x] Build/test on the actual Oracle ARM64 target architecture.
+- [ ] Provision the permanent domain/tunnel and set production secrets/SMTP/operator details.
+- [ ] Configure rclone/cron, copy a backup off-server, and prove a restore from that downloaded copy in a separate stack.
+- [ ] Configure external uptime monitoring, Sentry notification rules and backup freshness/failure notifications.
+- [ ] Deploy the reviewed code and confirm production health. No live infrastructure has been changed in this run.
 
-## Phase 6 — Verification and launch (2–3 days)
-- E2E (Playwright): sign up, connect a Bluesky or Mastodon account, compose with media, schedule, confirm it published.
-- A manual live test per approved platform with a real test account.
-- Load test: 1,000 scheduled posts due at the same minute, checking for no duplicates and the drain time.
-- Security pass: rerun the Phase 1 cross-tenant tests, `npm audit`, and confirm no secrets in the repo.
-- Soft launch to a few users for 1–2 weeks, with error dashboards watched daily, before an open launch.
+## Phase 5 — External platform access
 
----
+- [ ] Meta App Review/business verification, allowed scopes, deletion callback and screencast; review Graph API version before enabling.
+- [ ] Google OAuth consent verification and YouTube quota/access as needed.
+- [ ] LinkedIn Community Management organization-posting access.
+- [ ] Pinterest standard access.
+- [ ] X paid API access/budget before enabling posting.
+- [ ] TikTok remains disabled; implementing/auditing an adapter is future work if TikTok is needed.
+- [ ] Publish reviewed privacy/terms/deletion pages on the final public domain.
 
-**Estimated engineering time:** about 3–4 weeks (Phases 0–4 and 6). Platform approvals (Phase 5) run in parallel and decide which networks are live on launch day. Launch with the networks that are approved (Bluesky and Mastodon need no approval) and turn on the others as they clear.
+Start with Bluesky/Mastodon, which do not need a central app review. Do not treat
+implemented HTTP clients as evidence of approval for other users.
+
+## Phase 6 — Verification and launch
+
+- [x] Workspace tests, tenant-isolation checks and production dependency audit.
+- [x] Scheduling conversion tests include browser-zone independence and DST edge cases.
+- [x] Backup-script failure/corruption tests and Compose/workflow YAML parsing.
+- [x] Real PostgreSQL 18.6 schema/data/relationship/media restore from a copied snapshot in a temporary Ubuntu cluster; 35 application tables restored twice.
+- [x] Deployment/backup/restore locking, failure recovery, rollback revision and external-tunnel regression checks.
+- [x] Load test: 1,000 due posts, two workers, four concurrent jobs each; no duplicate claims/provider calls; completed-job replay checked.
+- [x] Browser flow on the standalone production web server: signup, fixture account connect, image upload, schedule, worker delivery, live status and reload without a duplicate.
+- [ ] Real production restore and provider-account smoke tests.
+- [ ] Soft launch with a few users and monitor for 1–2 weeks before public launch.
+
+Local automated tests use isolated databases and fixtures; they neither publish
+real social posts nor establish live production readiness. The remaining launch
+items depend on the deployment environment, credentials and platform approvals.

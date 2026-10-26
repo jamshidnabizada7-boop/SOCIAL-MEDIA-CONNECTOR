@@ -1,5 +1,5 @@
 import { and, inArray, isNotNull, lt, or } from "drizzle-orm";
-import { mediaAssets, oauthStates, sessions, userTokens, webhookEvents, workspaces } from "@aria/db";
+import { mediaAssets, oauthStates, rateLimitBuckets, sessions, userTokens, webhookEvents, workspaces } from "@aria/db";
 import type { AriaDatabase } from "@aria/db";
 import { defaultStorage } from "@aria/media-core";
 
@@ -37,6 +37,7 @@ export async function runMaintenance(db: AriaDatabase): Promise<Record<string, n
   }
 
   const expiredSessions = await db.delete(sessions).where(lt(sessions.expiresAt, new Date(now))).returning({ id: sessions.id });
+  const expiredBudgets = await db.delete(rateLimitBuckets).where(lt(rateLimitBuckets.expiresAt, new Date(now))).returning({ key: rateLimitBuckets.key });
   const staleTokens = await db
     .delete(userTokens)
     .where(or(lt(userTokens.expiresAt, new Date(now - DAY)), isNotNull(userTokens.usedAt)))
@@ -51,6 +52,7 @@ export async function runMaintenance(db: AriaDatabase): Promise<Record<string, n
     workspacesPurged: doomed.length,
     filesRemoved,
     sessions: expiredSessions.length,
+    rateLimitBuckets: expiredBudgets.length,
     tokens: staleTokens.length,
     oauthStates: staleStates.length,
     webhookEvents: oldWebhooks.length,

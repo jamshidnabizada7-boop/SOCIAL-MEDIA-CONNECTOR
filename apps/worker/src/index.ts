@@ -9,6 +9,8 @@ import { openDatabase, processPublishJob, processReconcileJob } from "./pipeline
 import { claimJobs, heartbeat, jobOutcome, LEASE_MS, type ClaimedJob } from "./pipeline/jobs.js";
 import { runMaintenance } from "./maintenance.js";
 import { ingestMetrics } from "./metrics.js";
+import { captureError, flushTelemetry } from "./telemetry.js";
+import { createOperationsMonitor, reportOperationsAlert } from "./alerts.js";
 
 const logger = pino({ level: workerConfig.LOG_LEVEL, base: { service: "aria-worker" } });
 
@@ -36,6 +38,7 @@ async function main() {
       else await processPublishJob(handle, job, jobLog);
     } catch (err) {
       // Engine bug or database hiccup: never leave the row active — retry later.
+      captureError(err, { jobId: job.id, queue: job.queue });
       logger.error({ err, jobId: job.id }, "job crashed; rescheduling");
       await jobOutcome
         .retryAt(handle.db, job, new Date(Date.now() + 60_000), `worker_error: ${(err as Error).message}`)
@@ -57,6 +60,7 @@ async function main() {
         claimed = await claimJobs(handle.db, WORKER_ID, workerConfig.WORKER_CONCURRENCY - inFlight.size);
       } catch (err) {
         logger.error({ err }, "claim failed");
+        captureError(err, { task: "claim" });
       }
       for (const job of claimed) {
         if (job.recovered) logger.warn({ jobId: job.id }, "recovered job from an expired lease");
@@ -77,6 +81,7 @@ async function main() {
       if (refreshed || flagged) logger.info({ refreshed, flagged }, "connection monitor");
     } catch (err) {
       logger.error({ err }, "connection monitor failed");
+      captureError(err, { task: "connection_monitor" });
     }
   };
   const monitorTimer = setInterval(monitor, 30 * 60_000);
@@ -88,6 +93,7 @@ async function main() {
       logger.info(result, "maintenance");
     } catch (err) {
       logger.error({ err }, "maintenance failed");
+      captureError(err, { task: "maintenance" });
     }
   };
   const maintenanceTimer = setInterval(maintenance, 24 * 3_600_000);
@@ -99,10 +105,22 @@ async function main() {
       if (captured) logger.info({ captured }, "metrics ingested");
     } catch (err) {
       logger.error({ err }, "metrics ingestion failed");
+      captureError(err, { task: "metrics" });
     }
   };
   const metricsTimer = setInterval(metrics, 60 * 60_000);
   setTimeout(metrics, 2 * 60_000);
+
+  const checkOperations = createOperationsMonitor((alert) => {
+    logger.error(alert, "operations alert");
+    reportOperationsAlert(alert);
+  });
+  const operationsTimer = setInterval(() => {
+    void checkOperations(handle.db).catch((err) => {
+      logger.error({ err }, "operations monitor failed");
+      captureError(err, { task: "operations_monitor" });
+    });
+  }, 60_000);
 
   // Liveness for the container healthcheck: the claim loop must have ticked recently.
   const health = createServer((req, res) => {
@@ -121,19 +139,25 @@ async function main() {
     clearInterval(monitorTimer);
     clearInterval(maintenanceTimer);
     clearInterval(metricsTimer);
+    clearInterval(operationsTimer);
     health.close();
     // Unfinished jobs keep their lease and are recovered by the next worker.
     await Promise.race([Promise.allSettled(inFlight.values()), new Promise((r) => setTimeout(r, 25_000))]);
     await handle.close();
+    await flushTelemetry();
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
 }
 
-process.on("unhandledRejection", (err) => logger.error({ err }, "unhandled rejection"));
+process.on("unhandledRejection", (err) => {
+  logger.error({ err }, "unhandled rejection");
+  captureError(err);
+});
 
 main().catch((err) => {
   logger.fatal({ err }, "worker failed to start");
-  process.exit(1);
+  captureError(err, { stage: "startup" });
+  void flushTelemetry().finally(() => process.exit(1));
 });

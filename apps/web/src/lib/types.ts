@@ -262,6 +262,8 @@ export interface Post {
   state: PostState;
   brandId: string;
   authorId: string;
+  authorName?: string;
+  authorHue?: number;
   campaign?: string;
   labels?: string[];
   timezone: string;

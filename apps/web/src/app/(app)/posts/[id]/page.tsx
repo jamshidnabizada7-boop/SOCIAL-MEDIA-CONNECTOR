@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   CalendarClock,
@@ -71,7 +71,9 @@ export default function PostDetailPage() {
     void load();
   }, [id]);
 
-  const live = useMemo(() => postsService.get(id as string) ?? post, [post, id]);
+  // The service subscription triggers renders when polling replaces its cache.
+  // Read on every render; memoizing by local state hid all background updates.
+  const live = postsService.get(id as string) ?? post;
 
   if (!loaded) {
     return (
@@ -105,8 +107,6 @@ export default function PostDetailPage() {
     (t) => !["published", "failed", "canceled", "token_expired", "needs_user_action", "pending"].includes(t.state)
   );
   const media = p.mediaIds.map((mid) => mediaService.get(mid)).filter((m): m is NonNullable<typeof m> => !!m);
-  const author = accounts.length; // placate lint; author rendering below uses static map
-  void author;
 
   const retryTarget = async (t: PublishTarget) => {
     if (t.state === "token_expired") {
@@ -142,7 +142,7 @@ export default function PostDetailPage() {
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ink-3">
             <span>Created {formatDateTime(p.createdAt)}</span>
             <span className="flex items-center gap-1.5">
-              <Avatar name="Maya Chen" hue={160} size="xs" /> Maya Chen
+              <Avatar name={p.authorName ?? "Maya Chen"} hue={p.authorHue ?? 160} size="xs" /> {p.authorName ?? "Maya Chen"}
             </span>
             <span>{p.timezone}</span>
             {p.scheduledAt && p.state === "scheduled" && (

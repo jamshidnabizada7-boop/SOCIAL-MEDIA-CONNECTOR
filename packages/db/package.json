@@ -21,16 +21,16 @@
   },
   "dependencies": {
     "@aria/shared-types": "*",
-    "@electric-sql/pglite": "^0.5.8",
-    "@electric-sql/pglite-socket": "^0.1.0",
-    "drizzle-orm": "^0.44.0",
-    "pg": "^8.16.0"
+    "@electric-sql/pglite": "^0.5.11",
+    "@electric-sql/pglite-socket": "^0.2.14",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.16.0",
+    "tsx": "^4.20.0"
   },
   "devDependencies": {
     "@types/pg": "^8.15.0",
     "drizzle-kit": "^0.31.0",
-    "tsx": "^4.20.0",
     "typescript": "^5",
-    "vitest": "^3.2.0"
+    "vitest": "^5.0.5"
   }
 }

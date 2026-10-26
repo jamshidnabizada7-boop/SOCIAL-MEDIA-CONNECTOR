@@ -5,13 +5,10 @@ import { CalendarClock } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/primitives";
+import { formatDateTimeInZone, localDateTimeToUtc } from "@aria/shared-types";
 
-function defaultWhen(): string {
-  const d = new Date(Date.now() + 24 * 3600_000);
-  d.setMinutes(0, 0, 0);
-  d.setHours(10);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function defaultWhen(timeZone: string): string {
+  return `${formatDateTimeInZone(new Date(Date.now() + 24 * 3600_000), timeZone).slice(0, 10)}T10:00`;
 }
 
 const TIMEZONES = ["Europe/Berlin", "Europe/London", "America/New_York", "America/Los_Angeles", "Asia/Tokyo", "UTC"];
@@ -27,29 +24,29 @@ export function ScheduleDialog({
   onConfirm: (iso: string) => void;
   workspaceTimezone: string;
 }) {
-  const [when, setWhen] = useState(defaultWhen());
+  const [when, setWhen] = useState(() => defaultWhen(workspaceTimezone));
   const [tz, setTz] = useState(workspaceTimezone);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
     if (open) {
-      setWhen(defaultWhen());
+      setWhen(defaultWhen(workspaceTimezone));
       setTz(workspaceTimezone);
       setError(undefined);
     }
   }, [open, workspaceTimezone]);
 
   const confirm = () => {
-    const t = new Date(when).getTime();
-    if (!when || Number.isNaN(t)) {
-      setError("Pick a valid date and time.");
-      return;
+    try {
+      const iso = localDateTimeToUtc(when, tz);
+      if (Date.parse(iso) < Date.now() + 60_000) {
+        setError("Choose a time at least a minute in the future.");
+        return;
+      }
+      onConfirm(iso);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Pick a valid date and time.");
     }
-    if (t < Date.now() - 60_000) {
-      setError("Choose a time in the future.");
-      return;
-    }
-    onConfirm(new Date(t).toISOString());
   };
 
   return (
@@ -72,9 +69,9 @@ export function ScheduleDialog({
         <Field label="Publish at" htmlFor="when" error={error}>
           <Input id="when" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
         </Field>
-        <Field label="Display time zone" htmlFor="schtz" hint="Recipients see the post at this local moment.">
+        <Field label="Time zone" htmlFor="schtz" hint="The date and time above use this time zone.">
           <Select id="schtz" value={tz} onChange={(e) => setTz(e.target.value)}>
-            {TIMEZONES.map((t) => (
+            {[...new Set([workspaceTimezone, ...TIMEZONES])].map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </Select>

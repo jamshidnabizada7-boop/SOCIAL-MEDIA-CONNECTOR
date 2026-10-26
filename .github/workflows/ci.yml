@@ -1,0 +1,46 @@
+name: Verify
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LOG_LEVEL: error
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:packages
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:ops
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run build:api && npm run build:worker
+      - run: npx playwright install --with-deps chromium
+      # The browser harness builds the web app in API mode and runs isolated services.
+      - run: npm run test:e2e
+      - run: npm run test:load
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-evidence
+          path: |
+            test-results/
+            .local/load-test.json
+          retention-days: 7
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate containers, migrations, backup and restore
+        run: sh deploy/smoke-test.sh
