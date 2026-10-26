@@ -10,7 +10,9 @@ case "$revision" in ''|*[!0-9a-f]*) echo 'Invalid revision' >&2; exit 1;; esac
 exec 9>.aria-operations.lock
 flock -n 9 || { echo 'Another deployment, backup or restore is running.' >&2; exit 1; }
 tar -xf "releases/$revision.tar"
-compose() { docker compose -f deploy/docker-compose.prod.yml --env-file .env "$@"; }
+# The script may arrive on SSH stdin. Docker exec/run must not consume the
+# remaining shell commands (including the final health/revision bookkeeping).
+compose() { docker compose -f deploy/docker-compose.prod.yml --env-file .env "$@" < /dev/null; }
 compose config -q
 compose build migrate web
 compose up -d postgres

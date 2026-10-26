@@ -96,7 +96,8 @@ implemented HTTP clients as evidence of approval for other users.
 - [x] Browser flow on the standalone production web server: signup, fixture account connect, image upload, schedule, worker delivery, live status and reload without a duplicate.
 - [x] Public Oracle browser sign-in/form validation/API routing and preserved credential decryption checks.
 - [ ] Re-upload two legacy logo files already missing before deployment; their metadata was preserved.
-- [ ] Real production restore and provider-account smoke tests.
+- [x] Restore an actual production snapshot into isolated PostgreSQL 16 with networking disabled; 35 tables, two users and the encrypted account recovered.
+- [ ] Live provider-account smoke tests.
 - [ ] Soft launch with a few users and monitor for 1–2 weeks before public launch.
 
 Local automated tests use isolated databases and fixtures; they neither publish

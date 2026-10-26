@@ -198,6 +198,22 @@ test("deployment preserves an existing external tunnel without starting another"
   assert.doesNotMatch(commands, /--profile tunnel/);
 }));
 
+test("Docker cannot consume the remaining deployment script when invoked over SSH stdin", () => fixture((ctx) => {
+  const revision = releaseFixture(ctx);
+  ctx.stub("docker", 'printf "%s\\n" "$*" >> "$OPS_LOG"; cat > /dev/null');
+  const source = fs.readFileSync("deploy/apply-release.sh", "utf8");
+  const result = spawnSync(bash, ["-c", 'PATH="$OPS_BIN:$PATH"; export PATH; exec sh -s -- "$@"', "ops", revision], {
+    cwd: ctx.dir,
+    env: { ...ctx.env, OPS_BIN: shellPath(path.join(ctx.dir, "bin")) },
+    input: source,
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.readFileSync(path.join(ctx.dir, "REVISION"), "utf8"), revision + "\n");
+  assert.equal(fs.readFileSync(path.join(ctx.dir, "PREVIOUS_REVISION"), "utf8"), "b".repeat(40) + "\n");
+  assert.match(result.stdout, /API, worker and web healthy/);
+}));
+
 test("failed pg_dump cannot produce a completed backup", () => fixture(({ dir, stub, run }) => {
   stub("pg_dump", "exit 7");
   assert.equal(run("deploy/backup.sh").status, 7);

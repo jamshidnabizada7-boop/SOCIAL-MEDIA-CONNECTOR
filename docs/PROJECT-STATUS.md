@@ -72,6 +72,10 @@ installation are outside this deployment.
 - Removed temporary build cache while retaining rollback images and snapshots.
 - Corrected public network counts/TikTok advertising and the claim that app
   passwords never reach the service; credentials are stored encrypted.
+- Restored an actual production snapshot into a separate PostgreSQL 16 container
+  with networking disabled; all 35 tables, two users and the encrypted account
+  record were recovered. Added a deployment regression check preventing Docker
+  from consuming the SSH script's remaining health/revision commands.
 
 ## Verification evidence
 
@@ -81,7 +85,7 @@ installation are outside this deployment.
 | `npm run typecheck` | Passed for all six backend packages |
 | `npm run lint` | Passed; 48 pre-existing web warnings remain, zero errors |
 | `npm test` | 119 tests passed: API 59, worker 29, media 10, provider core 21 |
-| `npm run test:ops` | 23 passed: partial-stop recovery, paused worker, invalid manifests/archives, retention, deployment failure/locking, external tunnels, storage upgrades, empty uploads and rollback revisions |
+| `npm run test:ops` | 24 passed: partial-stop recovery, paused worker, invalid manifests/archives, retention, deployment failure/locking, external tunnels, storage upgrades, empty uploads, SSH stdin and rollback revisions |
 | `npm run test:e2e` | Passed on a standalone production web build: real API/worker + local Bluesky HTTP fixture |
 | Browser story | Signup → connect → upload image → schedule → publish → live status → reload without duplication |
 | `npm run test:load` | 1,000 due posts, 2 workers × 4 jobs, 32.15 seconds, zero duplicate claims/provider calls; 10 replays made no new calls |
@@ -96,6 +100,7 @@ installation are outside this deployment.
 | Live Oracle application | API/worker/web healthy; both public domains return healthy responses; browser sign-in UI, local form validation and same-origin authentication routing pass |
 | Existing data/credentials | Two users, two media records, zero posts preserved; one account credential and one provider configuration decrypt successfully |
 | Local scheduled backup | systemd timer enabled; first production backup succeeded; next runs at 03:00 UTC daily |
+| Actual production snapshot recovery | Passed in a separate network-isolated PostgreSQL 16 container: 35 tables, two users and one encrypted account recovered; test container removed |
 
 The load result measures local PGlite with simulated provider latency; it is not a
 production throughput promise. Browser testing exercises real provider adapter
