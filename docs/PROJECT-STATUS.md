@@ -82,6 +82,12 @@ document.
   authorization failures, malformed responses and permalink lookup failure.
   All 46 worker tests and 21 provider-core tests pass. These tests make no real
   social posts; public publishing acceptance still requires a reviewed test post.
+- Deployed this repair as `b831ae23c4d448f5434e77616c1e644fcecc198e` on Oracle;
+  API, worker and web health checks passed. A fresh production backup and
+  `before-meta-publishing-8bbf3c3` rollback image tags were preserved before the
+  update. There were no existing publishing targets in the user's workspace to
+  recover or retry. Threads credentials and Meta-side setup remain blocked on
+  browser control becoming available again.
 
 Primary protocol references: [Meta Instagram API collection](https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api?entity=request-23987686-66f145c2-29b1-4d97-afbd-5710369027c0),
 [Meta Threads API collection](https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api?entity=request-34203612-ee0a2365-9d95-4cbe-8087-1cfb04d38c05),
