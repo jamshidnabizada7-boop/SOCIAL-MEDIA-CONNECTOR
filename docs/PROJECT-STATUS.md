@@ -12,7 +12,8 @@ monitoring and real-platform acceptance still need external setup.**
   app secret was reused, not rotated; no credentials are committed here.
 - Real browser verification now shows the Aria Hub Facebook Page and the
   `aria___hub` and `little_moments000` Instagram accounts in the user's composer.
-  This verifies account connection, not a live publishing acceptance test.
+  Read-only calls to Meta's live API returned HTTP 200 and matching identities
+  for all three accounts. This verifies connection, not live publishing.
 - Meta business verification remains incomplete. The administrator's own
   connection works, but public access must not be claimed until Meta grants the
   required advanced access and publishing has been tested.
@@ -29,6 +30,27 @@ monitoring and real-platform acceptance still need external setup.**
   providers, corrupt credentials, maintenance, and reconnection at capacity.
   Existing tests pass (one security suite timed out under a simultaneous build
   and passed in isolation). Local production web build and backend typecheck pass.
+- Deployed application commit `8bbf3c3d569c61a83371a60fbd94bfab320b0fe8` to
+  Oracle. API, worker and web health checks passed; public API/database health is
+  OK, the web returns HTTP 200, and unauthenticated connection-options returns
+  HTTP 401. Lint has zero errors and 48 warnings.
+- With explicit user approval, created Meta app **Aria Hub Social**
+  (`2042458516470680`) under the existing Ahmad Jamshid business, with the
+  Threads API use case. Its **Threads-specific app ID is `2359841171457273`**;
+  do not substitute the parent app ID. Started adding `threads_content_publish`
+  and entered `https://api.myariahub.com/v1/oauth/callback/threads`.
+  Browser control became unavailable before Save/secret retrieval could be
+  completed. The Windows fallback also failed to connect to its native helper.
+  Therefore the callback save and publishing-permission completion still need
+  verification; no Threads secret has been installed on Oracle, and the app
+  remains unpublished. Resume this existing app, do not create a duplicate.
+
+Threads setup page:
+https://developers.facebook.com/apps/2042458516470680/use_cases/customize/?use_case_enum=THREADS_API&business_id=697964186714313
+
+The user declined manual credential entry and wants the agent to complete the
+remaining setup. Do not ask for secrets in chat. The ignored
+`.local/threads-credentials.json` contains the app ID and an empty secret only.
 
 Provider credentials for Threads, LinkedIn, YouTube, X and Pinterest still need
 setup. TikTok has no publishing adapter. These are not enabled by changing the
