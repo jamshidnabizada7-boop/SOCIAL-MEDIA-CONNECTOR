@@ -5,6 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { CircleCheckBig, KeyRound, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import type { ProviderId, ProviderInfo, SocialAccount } from "@/lib/types";
 import { accountsService } from "@/lib/services/accounts";
+import { DATA_MODE } from "@/lib/api/client";
 import { useSubscribe } from "@/lib/services/hooks";
 import { useSession, useToast } from "@/components/providers";
 import { PageHeader, PageBody } from "@/components/shell/page-header";
@@ -13,7 +14,7 @@ import { Avatar, Card, EmptyState, Skeleton } from "@/components/ui/primitives";
 import { ConfirmDialog, Dialog, DropdownMenu } from "@/components/ui/dialog";
 import { ConnectionPill, ProviderBadge } from "@/components/ui/status";
 import { ConnectAccountFlow as ConnectFlow } from "@/components/accounts/connect-flow";
-import { PROVIDERS, PROVIDER_LIST } from "@/lib/providers";
+import { PROVIDERS } from "@/lib/providers";
 import { formatNumber, timeAgo } from "@/lib/utils";
 
 function CapabilityDialog({ open, onClose, provider }: { open: boolean; onClose: () => void; provider: ProviderInfo }) {
@@ -89,6 +90,8 @@ function AccountsInner() {
   const [loaded, setLoaded] = useState(false);
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [connectOpen, setConnectOpen] = useState(false);
+  const [initialProvider, setInitialProvider] = useState<ProviderId | undefined>();
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState<SocialAccount | null>(null);
   const [capsProvider, setCapsProvider] = useState<ProviderInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -98,7 +101,10 @@ function AccountsInner() {
       setAccounts(accountsService.list());
       setLoaded(true);
     };
-    accountsService.listAsync().then(read);
+    accountsService.listAsync().then(read).catch((err) => {
+      setLoadError(err instanceof Error ? err.message : "Could not load accounts.");
+      setLoaded(true);
+    });
     return accountsService.subscribe(read);
   }, []);
 
@@ -106,14 +112,22 @@ function AccountsInner() {
     if (params.get("connect") === "1") setConnectOpen(true);
     const connect = params.get("connect");
     if (connect === "error") {
+      const reason = params.get("reason");
+      const messages: Record<string, string> = {
+        plan_limit: "Your plan's connected-account limit has been reached. Disconnect an unused account or upgrade before adding another.",
+        state_expired: "The sign-in session expired. Please start the connection again.",
+        access_denied: "Authorization was cancelled or denied. You can try again when ready.",
+        missing_code: "The network did not complete authorization. Please try connecting again.",
+      };
       toast({
         title: "Connection failed",
-        description: params.get("reason") ?? "The network rejected the connection. Try again.",
+        description: (reason && messages[reason]) || reason || "The network rejected the connection. Try again.",
         variant: "error",
       });
       window.history.replaceState(null, "", "/accounts");
     } else if (params.get("connected")) {
-      toast({ title: "Account connected", description: "It can now publish for this workspace.", variant: "success" });
+      const skipped = Number(params.get("skipped") || 0);
+      toast({ title: "Account connected", description: skipped > 0 ? `${skipped} additional account(s) were skipped because your plan's channel limit was reached.` : "The network authorized this connection. Publishing depends on its permissions and content requirements.", variant: skipped > 0 ? "info" : "success" });
       window.history.replaceState(null, "", "/accounts");
     }
   }, [params, toast]);
@@ -128,11 +142,19 @@ function AccountsInner() {
   const expiring = accounts.filter((a) => a.connection === "token_expiring");
 
   const reconnect = async (a: SocialAccount) => {
+    if (DATA_MODE === "api" && (a.provider === "bluesky" || a.provider === "mastodon")) {
+      setInitialProvider(a.provider);
+      setConnectOpen(true);
+      return;
+    }
     setBusy(a.id);
-    await accountsService.reconnect(a.id);
-    setAccounts(accountsService.list());
-    setBusy(null);
-    toast({ title: `${a.displayName} reconnected`, description: "Scheduled content will resume normally.", variant: "success" });
+    try {
+      await accountsService.reconnect(a.id);
+      setAccounts(accountsService.list());
+      if (DATA_MODE !== "api") toast({ title: `${a.displayName} reconnected`, variant: "success" });
+    } catch (err) {
+      toast({ title: "Reconnection failed", description: err instanceof Error ? err.message : "Please try again.", variant: "error" });
+    } finally { setBusy(null); }
   };
 
   if (!loaded) {
@@ -178,6 +200,10 @@ function AccountsInner() {
       </PageHeader>
 
       <PageBody className="space-y-5">
+        {loadError && <div role="alert" className="rounded-lg border border-danger/30 p-4 text-sm"><p>{loadError}</p><Button variant="secondary" onClick={async () => {
+          try { await accountsService.listAsync(); setAccounts(accountsService.list()); setLoadError(null); }
+          catch (err) { setLoadError(err instanceof Error ? err.message : "Could not load accounts."); }
+        }}>Retry loading accounts</Button></div>}
         {unhealthy.length > 0 && (
           <Card className="border-danger/30">
             <div className="flex flex-wrap items-center gap-3 p-4">
@@ -198,7 +224,7 @@ function AccountsInner() {
           </Card>
         )}
 
-        {accounts.length === 0 ? (
+        {accounts.length === 0 && !loadError ? (
           <EmptyState
             icon={<ShieldCheck className="size-5" />}
             title="No accounts connected"
@@ -246,9 +272,13 @@ function AccountsInner() {
                                 label: "Refresh health",
                                 icon: <RefreshCw className="size-4" />,
                                 onSelect: async () => {
-                                  await accountsService.refresh(a.id);
-                                  setAccounts(accountsService.list());
-                                  toast({ title: "Connection checked", description: "Token verified and refreshed.", variant: "success" });
+                                  try {
+                                    await accountsService.refresh(a.id);
+                                    setAccounts(accountsService.list());
+                                    toast({ title: "Credentials checked", description: "A stored token is available. Access is confirmed by the network when used.", variant: "info" });
+                                  } catch (err) {
+                                    toast({ title: "Connection check failed", description: err instanceof Error ? err.message : "Please reconnect this account.", variant: "error" });
+                                  }
                                 },
                               },
                               ...(a.connection !== "healthy"
@@ -294,20 +324,23 @@ function AccountsInner() {
         <Card className="p-5">
           <p className="text-[13px] font-semibold">How connections work</p>
           <p className="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-ink-2">
-            Connecting uses each network&apos;s official authorization — Aria Hub never sees your
-            password. Access tokens are encrypted at rest, refreshed automatically before they
-            expire (with a lock so two workers never refresh the same token), and revoked with the
-            network when you disconnect. Disconnecting here does not delete anything you&apos;ve already
-            published.
+            Most networks use their own sign-in page. Bluesky uses a dedicated app password.
+            Access tokens are encrypted at rest and refreshed where supported. Disconnecting removes
+            stored access from this workspace; you can also revoke access in the network&apos;s settings.
+            Already-published posts stay live.
           </p>
         </Card>
       </PageBody>
 
       <ConnectFlow
         open={connectOpen}
-        onClose={() => setConnectOpen(false)}
+        initialProvider={initialProvider}
+        onClose={() => { setConnectOpen(false); setInitialProvider(undefined); }}
         brandId={session?.brandId ?? "brand_aria"}
-        onConnected={() => setAccounts(accountsService.list())}
+        onConnected={async () => {
+          try { await accountsService.listAsync(); setAccounts(accountsService.list()); setLoadError(null); }
+          catch { setLoadError("Account connected, but the list could not be refreshed. Please retry."); }
+        }}
       />
 
       <ConfirmDialog
@@ -315,14 +348,19 @@ function AccountsInner() {
         onClose={() => setConfirmDisconnect(null)}
         onConfirm={async () => {
           if (confirmDisconnect) {
-            await accountsService.disconnect(confirmDisconnect.id);
-            setAccounts(accountsService.list());
-            toast({ title: `${confirmDisconnect.displayName} disconnected`, description: "The token was revoked with the network.", variant: "info" });
+            try {
+              await accountsService.disconnect(confirmDisconnect.id);
+              setAccounts(accountsService.list());
+              toast({ title: `${confirmDisconnect.displayName} disconnected`, description: "Stored access was removed from this workspace.", variant: "info" });
+            } catch (err) {
+              toast({ title: "Could not disconnect", description: err instanceof Error ? err.message : "Please try again.", variant: "error" });
+              return;
+            }
           }
           setConfirmDisconnect(null);
         }}
         title={`Disconnect ${confirmDisconnect?.displayName ?? ""}?`}
-        body="We revoke the stored token with the network and remove the connection from this workspace. Already-published posts stay live; scheduled content for this account will be paused."
+        body="Remove this connection and its stored tokens from the workspace. You can also revoke access in the network’s settings. Already-published posts stay live; scheduled content for this account will stop."
         confirmLabel="Disconnect"
         danger
       />

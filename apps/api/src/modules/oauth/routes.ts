@@ -23,26 +23,13 @@ import {
   DEFAULT_BLUESKY_INSTANCE,
   fetchProfile,
   mastodonInstanceInfo,
-  isProviderConfigured,
-  providerName,
 } from "@aria/providers-core";
-import { requireAuth } from "../../plugins/auth.js";
+import { requireAuth, requireWorkspacePermission } from "../../plugins/auth.js";
+import { connectionOption } from "./availability.js";
 import { writeAudit } from "../../lib/audit.js";
 import { checkChannelLimit } from "../../lib/limits.js";
 
 const STATE_TTL_MS = 10 * 60_000;
-const SUPPORTED: ProviderId[] = [
-  "facebook",
-  "instagram",
-  "threads",
-  "linkedin",
-  // "tiktok" — OAuth works but there is no publishing adapter yet; re-enable with the adapter.
-  "youtube",
-  "x",
-  "pinterest",
-  "bluesky",
-  "mastodon",
-];
 
 const workspaceRef = z.union([z.string().uuid(), z.literal("current")]);
 
@@ -108,6 +95,13 @@ async function safeInstance(input: string | undefined): Promise<string | undefin
 export function registerOauthRoutes(app: FastifyInstance): void {
   const db = app.database.db;
 
+  app.get("/v1/workspaces/:workspaceId/connection-options", {
+    preHandler: requireWorkspacePermission(app, "connect_accounts"),
+  }, async (_req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return { options: await Promise.all((Object.keys(PROVIDERS) as ProviderId[]).map((provider) => connectionOption(db, provider))) };
+  });
+
   /**
    * Step 1 of OAuth: mint a single-use state bound to (provider, workspace,
    * user), persist it, and redirect to the provider. The stored state is the
@@ -116,7 +110,7 @@ export function registerOauthRoutes(app: FastifyInstance): void {
    */
   app.get("/v1/oauth/:provider/authorize", { preHandler: requireAuth(app) }, async (req, reply) => {
     const { provider } = req.params as { provider: ProviderId };
-    if (!SUPPORTED.includes(provider)) {
+    if (!Object.hasOwn(PROVIDERS, provider)) {
       return reply.status(404).send({ error: { code: "unknown_provider", message: "Unknown provider." } });
     }
     const parsed = authorizeQuery.safeParse(req.query);
@@ -128,25 +122,24 @@ export function registerOauthRoutes(app: FastifyInstance): void {
     if (!workspaceId || !(await requireConnectPermission(db, workspaceId, req.user!.id))) {
       return reply.status(403).send({ error: { code: "forbidden", message: "You cannot connect accounts in this workspace." } });
     }
+    const option = await connectionOption(db, provider);
+    if (option.status !== "available") {
+      return reply.status(400).send({ error: {
+        code: option.status === "unsupported" ? "provider_unsupported" : option.status === "unavailable" ? "provider_unavailable" : "provider_unconfigured",
+        message: option.message,
+      } });
+    }
     let instance: string | undefined;
     try {
       instance = await safeInstance(parsed.data.instance);
     } catch (err) {
       return reply.status(400).send({ error: { code: "invalid_instance", message: (err as Error).message } });
     }
-    const limit = await checkChannelLimit(db, workspaceId);
-    if (limit) return reply.status(402).send({ error: limit });
+    // The provider has not identified the account yet. Enforce the channel
+    // limit in the callback so an existing account can reconnect at capacity.
     if (provider === "bluesky") {
       return reply.status(400).send({
         error: { code: "use_app_password", message: "Bluesky connects with an app password: POST /v1/accounts/bluesky/connect." },
-      });
-    }
-    if (!(await isProviderConfigured(db, provider))) {
-      return reply.status(400).send({
-        error: {
-          code: "provider_unconfigured",
-          message: `${providerName(provider)} has no developer app on this server yet. Add the app ID and secret in Admin → Provider credentials (or docs/phase-0/PROVIDER-SETUP.md).`,
-        },
       });
     }
 
@@ -217,6 +210,7 @@ export function registerOauthRoutes(app: FastifyInstance): void {
       const accounts = [profile, ...(profile.extra ?? [])];
       const metaProvider = provider === "facebook" || provider === "instagram" || provider === "threads";
       let skippedForLimit = 0;
+      let connected = 0;
       for (const p of accounts) {
         // Facebook: p.accessToken is the Page token (the only token that can
         // publish to the Page). Other providers use the grant token directly.
@@ -313,7 +307,9 @@ export function registerOauthRoutes(app: FastifyInstance): void {
           ip: req.ip,
           userAgent: req.headers["user-agent"],
         });
+        connected++;
       }
+      if (!connected && skippedForLimit) return reply.redirect(webRedirect("/accounts?connect=error&reason=plan_limit"));
       return reply.redirect(
         webRedirect(`/accounts?connected=${provider}${skippedForLimit ? `&skipped=${skippedForLimit}&reason=plan_limit` : ""}`)
       );
@@ -347,16 +343,25 @@ export function registerOauthRoutes(app: FastifyInstance): void {
     if (!workspaceId || !(await requireConnectPermission(db, workspaceId, req.user!.id))) {
       return reply.status(403).send({ error: { code: "forbidden", message: "You cannot connect accounts in this workspace." } });
     }
+    const option = await connectionOption(db, "bluesky");
+    if (option.status !== "available") return reply.status(400).send({ error: { code: "provider_unavailable", message: option.message } });
     let instanceUrl: string;
     try {
       instanceUrl = (await safeInstance(parsed.data.instance)) ?? DEFAULT_BLUESKY_INSTANCE;
     } catch (err) {
       return reply.status(400).send({ error: { code: "invalid_instance", message: (err as Error).message } });
     }
-    const limit = await checkChannelLimit(db, workspaceId);
-    if (limit) return reply.status(402).send({ error: limit });
     try {
       const session = await blueskyCreateSession(handle, appPassword, { instanceUrl });
+      const [existing] = await db.select({ id: socialAccounts.id }).from(socialAccounts).where(and(
+        eq(socialAccounts.workspaceId, workspaceId),
+        eq(socialAccounts.providerId, "bluesky"),
+        eq(socialAccounts.externalAccountId, session.did),
+      )).limit(1);
+      if (!existing) {
+        const limit = await checkChannelLimit(db, workspaceId);
+        if (limit) return reply.status(402).send({ error: limit });
+      }
       const displayHandle = `@${session.handle}`;
       await db
         .insert(socialAccounts)

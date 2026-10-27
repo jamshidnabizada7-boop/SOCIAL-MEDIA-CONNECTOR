@@ -200,6 +200,7 @@ export function ConnectAccountFlow(props: {
     return (
       <ConnectFlowApi
         open={props.open}
+        initialProvider={props.initialProvider}
         onClose={props.onClose}
         onConnected={(a) => props.onConnected?.({ provider: a.provider, handle: a.handle } as unknown as SocialAccount)}
       />

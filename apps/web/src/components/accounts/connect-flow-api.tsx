@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { ConnectionOption } from "@aria/shared-types";
 import { KeyRound, Loader2, ShieldCheck } from "lucide-react";
 import type { ProviderId } from "@/lib/types";
 import { PROVIDERS, PROVIDER_LIST } from "@/lib/providers";
@@ -28,10 +29,12 @@ export function ConnectFlowApi({
   open,
   onClose,
   onConnected,
+  initialProvider,
 }: {
   open: boolean;
   onClose: () => void;
   onConnected?: (account: { provider: ProviderId; handle: string }) => void;
+  initialProvider?: ProviderId;
 }) {
   const { session } = useSession();
   const [step, setStep] = useState<ApiStep>({ kind: "picker" });
@@ -39,6 +42,31 @@ export function ConnectFlowApi({
   const [appPassword, setAppPassword] = useState("");
   const [instance, setInstance] = useState("mastodon.social");
   const [error, setError] = useState<string | null>(null);
+  const [options, setOptions] = useState<ConnectionOption[] | null>(null);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const workspaceId = session?.workspace.id;
+
+  useEffect(() => {
+    if (!open || !workspaceId) return;
+    let active = true;
+    setOptions(null);
+    setOptionsError(null);
+    setStep({ kind: "picker" });
+    setAppPassword("");
+    setError(null);
+    apiGet<{ options: ConnectionOption[] }>(`/v1/workspaces/${workspaceId}/connection-options`)
+      .then(({ options: available }) => {
+        if (!active) return;
+        setOptions(available);
+        if (initialProvider === "bluesky" && available.some(o => o.provider === initialProvider && o.status === "available")) setStep({ kind: "bluesky", state: "form" });
+        if (initialProvider === "mastodon" && available.some(o => o.provider === initialProvider && o.status === "available")) setStep({ kind: "mastodon", state: "instance" });
+      })
+      .catch((err) => {
+        if (active) setOptionsError(err instanceof ApiError ? err.message : "Could not check available networks. Please try again.");
+      });
+    return () => { active = false; };
+  }, [open, workspaceId, initialProvider, reload]);
 
   if (!session) return null;
 
@@ -122,7 +150,7 @@ export function ConnectFlowApi({
       }
       description={
         step.kind === "picker"
-          ? "Authorization happens through the network's official sign-in. We never see your password."
+          ? "Choose an available network. Most use official sign-in; Bluesky uses an app password."
           : step.kind === "bluesky"
             ? "Create an app password in Bluesky (Settings → App passwords) and paste it here."
             : step.kind === "mastodon"
@@ -131,28 +159,42 @@ export function ConnectFlowApi({
       }
       width="md"
       footer={
-        <Button variant="secondary" onClick={() => { reset(); onClose(); }}>
-          {step.kind === "error" ? "Back" : "Cancel"}
+        <Button variant="secondary" onClick={() => { reset(); if (step.kind === "picker") onClose(); }}>
+          {step.kind === "picker" ? "Cancel" : "Back to networks"}
         </Button>
       }
     >
       {step.kind === "picker" && (
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-          {PROVIDER_LIST.map((p) => (
+        <div className="space-y-3">
+          {optionsError ? <div role="alert" className="space-y-3 text-sm"><p>{optionsError}</p><Button onClick={() => setReload(n => n + 1)}>Try again</Button></div> : !options ? <p role="status" className="py-6 text-center text-sm">Checking available networks…</p> : <>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+          {PROVIDER_LIST.map((p) => {
+            const option = options.find(o => o.provider === p.id);
+            const available = option?.status === "available";
+            return (
             <button
               key={p.id}
+              disabled={!available}
               onClick={() => {
                 if (p.id === "bluesky") setStep({ kind: "bluesky", state: "form" });
                 else if (p.id === "mastodon") setStep({ kind: "mastodon", state: "instance" });
                 else void connectGeneric(p.id);
               }}
-              className="group flex flex-col items-center gap-2 rounded-xl border bg-surface p-4 text-center transition-colors hover:border-accent hover:bg-accent-soft/40"
+              className="group flex flex-col items-center gap-2 rounded-xl border bg-surface p-4 text-center transition-colors enabled:hover:border-accent enabled:hover:bg-accent-soft/40 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <ProviderBadge provider={p.id} size="lg" />
               <span className="text-[13px] font-semibold">{p.name}</span>
-              <span className="text-[11px] leading-snug text-ink-3">{p.connectHint}</span>
+              <span className="text-[11px] leading-snug text-ink-2">{available ? p.connectHint : option?.status === "unsupported" ? "Not supported yet" : option?.status === "unavailable" ? "Temporarily unavailable" : "Setup required"}</span>
             </button>
-          ))}
+          );})}
+          </div>
+          {options.some(o => o.status !== "available") && <div className="rounded-lg border bg-surface-2 p-3 text-xs leading-relaxed text-ink-2">
+            <p className="font-semibold text-ink">Networks awaiting setup</p>
+            {options.filter(o => o.status !== "available").map(o => <p key={o.provider} className="mt-2"><strong>{PROVIDERS[o.provider].name}:</strong> {o.message}</p>)}
+            {session.user.isAdmin && <Link href="/admin" onClick={onClose} className="mt-2 inline-block font-semibold text-accent underline">Manage provider credentials</Link>}
+          </div>}
+          <p className="text-xs text-ink-3">Availability reflects server setup. Each network may still require app approval and permission to access your accounts.</p>
+          </>}
         </div>
       )}
 
@@ -221,8 +263,7 @@ export function ConnectFlowApi({
               <p className="font-semibold text-ink">How to fix this</p>
               {session.user.isAdmin ? (
                 <p className="mt-1">
-                  Register a developer app for {PROVIDERS[step.provider].name} (steps in{" "}
-                  <code className="font-mono text-[11.5px]">docs/phase-0/PROVIDER-SETUP.md</code>), then paste its ID and
+                  Configure and activate a developer app for {PROVIDERS[step.provider].name}, then save its ID and
                   secret in{" "}
                   <Link
                     href="/admin"
@@ -234,7 +275,7 @@ export function ConnectFlowApi({
                   >
                     Admin → Provider credentials
                   </Link>
-                  . This dialog will connect normally afterwards.
+                  . The network may also require app review before granting access.
                 </p>
               ) : (
                 <p className="mt-1">
@@ -243,7 +284,7 @@ export function ConnectFlowApi({
                 </p>
               )}
               <p className="mt-2 text-ink-3">
-                Bluesky and Mastodon need no developer app — they connect right now from this dialog.
+                Bluesky and Mastodon do not require a shared developer app. Return to the network picker to check availability.
               </p>
             </div>
           )}

@@ -1,8 +1,39 @@
-# Project handoff — 26 October 2026
+# Project handoff — 27 October 2026
 
 **The application is deployed on Oracle at https://app.myariahub.com.
 Container, restore, public health and browser checks pass. Email, offsite backup,
 monitoring and real-platform acceptance still need external setup.**
+
+## Connection repair — 27 October
+
+- Replaced the inactive Meta app ID in the encrypted production credential store
+  with the existing live MY ARIA HUB app, after taking a production backup.
+  Added and verified exact Facebook and Instagram callback URLs. The existing
+  app secret was reused, not rotated; no credentials are committed here.
+- Real browser verification now shows the Aria Hub Facebook Page and the
+  `aria___hub` and `little_moments000` Instagram accounts in the user's composer.
+  This verifies account connection, not a live publishing acceptance test.
+- Meta business verification remains incomplete. The administrator's own
+  connection works, but public access must not be claimed until Meta grants the
+  required advanced access and publishing has been tested.
+- Added workspace-authorized connection availability. Missing/broken credentials,
+  maintenance and unsupported TikTok are explained before sign-in. Credentials
+  and internal documentation paths are not exposed by this endpoint.
+- Reconnect now reopens authorization rather than retrying a revoked token;
+  Bluesky and Mastodon open their dedicated forms. Reauthorization at the plan's
+  channel limit is allowed, while new accounts still obey the limit. An OAuth
+  callback that connects no accounts due to the limit no longer claims success.
+- Fixed Back navigation, account-list reload after connection, loading failures,
+  refresh/disconnect error handling and inaccurate token/revocation claims.
+- Seven new API regressions pass, including tenant/role isolation, unsupported
+  providers, corrupt credentials, maintenance, and reconnection at capacity.
+  Existing tests pass (one security suite timed out under a simultaneous build
+  and passed in isolation). Local production web build and backend typecheck pass.
+
+Provider credentials for Threads, LinkedIn, YouTube, X and Pinterest still need
+setup. TikTok has no publishing adapter. These are not enabled by changing the
+picker status. Deployment revision is recorded on Oracle, not inferred from this
+document.
 
 ## Where Claude stopped
 

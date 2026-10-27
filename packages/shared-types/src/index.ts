@@ -28,6 +28,13 @@ export type ConnectionState =
   | "permission_missing"
   | "disconnected";
 
+/** Server configuration, not a guarantee of permission from the social network. */
+export interface ConnectionOption {
+  provider: ProviderId;
+  status: "available" | "setup_required" | "unavailable" | "unsupported";
+  message: string;
+}
+
 /* ------------------------------------------------------------------ */
 /* Provider capability registry                                        */
 /* ------------------------------------------------------------------ */

@@ -449,9 +449,9 @@ export class ApiAccountsService implements AccountsService {
   }
 
   async reconnect(id: string): Promise<SocialAccount> {
-    await apiPost(`/v1/workspaces/current/accounts/${id}/refresh`);
-    await this.refreshCache();
-    return this.cache.find((a) => a.id === id)!;
+    const account = this.cache.find((a) => a.id === id);
+    if (!account) throw new ApiError(404, "not_found", "Account not found. Refresh the page and try again.");
+    return this.connect(account.provider);
   }
 
   async disconnect(id: string): Promise<void> {
