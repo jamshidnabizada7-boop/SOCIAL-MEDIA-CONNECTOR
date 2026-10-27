@@ -9,9 +9,11 @@ import {
   igCreateMediaContainer,
   igDeleteMedia,
   igPublishContainer,
+  igMediaPermalink,
   ProviderHttpError,
 } from "@aria/providers-core";
 import { PROVIDERS } from "@aria/shared-types";
+import { waitForMetaContainer } from "./meta-container.js";
 
 /**
  * Instagram adapter. Container→publish flow with PUBLIC media URLs
@@ -28,29 +30,27 @@ function httpError(e: unknown): PublishErrorInfo {
     return {
       code: `instagram_http_${e.status}`,
       title: "Instagram rejected the request",
-      message: e.status === 190 ? "Token expired — reconnect the account." : e.message,
+      message: e.status === 401 ? "Token expired — reconnect the account." : e.message,
       retryable: e.status >= 500 || e.status === 429,
       technical: e.body,
     };
   }
   return {
-    code: "instagram_error",
+    code: (e as { code?: string }).code ?? "instagram_error",
     title: "Instagram publish failed",
     message: (e as Error).message ?? "Unknown error",
     retryable: false,
   };
 }
 
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
 export const instagramAdapter: SocialProviderAdapter = {
   id: "instagram",
   capabilities: caps,
   validateContent(input) {
-    const settings = input.settings as { altText?: string };
     const media = input.content.media;
+    if (input.content.caption.length > caps().maxCaptionLength) return {
+      code: "caption_too_long", title: "Instagram caption is too long", message: `Use at most ${caps().maxCaptionLength} characters.`, retryable: false,
+    };
     if (media.length === 0) {
       return {
         code: "media_required",
@@ -68,6 +68,9 @@ export const instagramAdapter: SocialProviderAdapter = {
       };
     }
     for (const m of media) {
+      if (m.kind === "document") return {
+        code: "document_not_supported", title: "Instagram requires images or video", message: "Remove the document or deselect Instagram.", retryable: false,
+      };
       if (m.kind === "image" && m.mime && !m.mime.startsWith("image/jpeg")) {
         return {
           code: "unsupported_format",
@@ -85,7 +88,6 @@ export const instagramAdapter: SocialProviderAdapter = {
           retryable: false,
         };
       }
-      void settings;
     }
     return null;
   },
@@ -101,7 +103,7 @@ export const instagramAdapter: SocialProviderAdapter = {
       );
     }
     const isCarousel = input.content.media.length > 1;
-    const settings = input.settings as { altText?: string; aiGenerated?: boolean };
+    const settings = input.settings as { altText?: string };
     const caption = input.content.caption;
 
     const childIds: string[] = [];
@@ -115,11 +117,12 @@ export const instagramAdapter: SocialProviderAdapter = {
             imageUrl: m.kind === "image" ? m.publicUrl : undefined,
             videoUrl: m.kind === "video" ? m.publicUrl : undefined,
             isCarouselItem: true,
+            altText: m.kind === "image" ? m.altText ?? settings.altText : undefined,
           }
         );
         childIds.push(container.creationId);
       }
-      await sleep(1200); // docs: children must finish before the carousel container
+      await Promise.all(childIds.map(id => waitForMetaContainer("Instagram", () => igContainerStatus(id, ctx.accessToken!))));
     }
 
     const mainContainer = await igCreateMediaContainer(
@@ -129,6 +132,7 @@ export const instagramAdapter: SocialProviderAdapter = {
         ? {
             mediaType: "CAROUSEL",
             caption,
+            children: childIds,
             aiGenerated: input.aiDisclosed,
           }
         : {
@@ -142,41 +146,16 @@ export const instagramAdapter: SocialProviderAdapter = {
                 ? input.content.media[0].publicUrl
                 : undefined,
             caption,
-            altText: settings.altText,
+            altText: input.content.media[0]?.kind === "image" ? input.content.media[0].altText ?? settings.altText : undefined,
             aiGenerated: input.aiDisclosed,
           }
     );
-    if (childIds.length > 0) {
-      // Attach children — Graph API v23 expects a comma list on the carousel container.
-      await fetch(`${`https://graph.facebook.com/v23.0`}/${mainContainer.creationId}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${ctx.accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ children: childIds.join(",") }),
-      });
-    }
-
-    // Poll container status (docs: once per minute, ≤5 minutes).
-    let ready = false;
-    for (let i = 0; i < 5; i++) {
-      const status = await igContainerStatus(mainContainer.creationId, ctx.accessToken).catch(() => null);
-      if (status?.statusCode === "FINISHED") {
-        ready = true;
-        break;
-      }
-      if (status?.statusCode === "ERROR" || status?.statusCode === "EXPIRED") {
-        throw Object.assign(new Error(`Instagram container ${status.statusCode}`), { status: 422 });
-      }
-      await sleep(3000);
-    }
-    if (!ready && isCarousel) {
-      throw Object.assign(new Error("Instagram carousel container did not finish in time"), { status: 504 });
-    }
+    await waitForMetaContainer("Instagram", () => igContainerStatus(mainContainer.creationId, ctx.accessToken!));
 
     const published = await igPublishContainer(ctx.externalAccountId, ctx.accessToken, mainContainer.creationId);
-    return {
-      providerPostId: published.mediaId,
-      permalink: `https://instagram.com/p/${published.mediaId.slice(0, 11)}`,
-    };
+    // A failed optional lookup must never retry an already-successful publish.
+    const permalink = await igMediaPermalink(published.mediaId, ctx.accessToken).catch(() => undefined);
+    return { providerPostId: published.mediaId, permalink };
   },
   async getPostStatus() {
     return { state: "published" as const };

@@ -57,6 +57,36 @@ setup. TikTok has no publishing adapter. These are not enabled by changing the
 picker status. Deployment revision is recorded on Oracle, not inferred from this
 document.
 
+## Meta publishing repair — 27 October
+
+- Fixed Instagram and Threads container clients to map Meta's real `id` response
+  to `creationId`, and their `status_code` / `status` fields to the worker's
+  processing status. The old clients sent undefined container IDs to publishing.
+- Fixed Instagram carousel creation: child IDs now go in the parent creation
+  request, after all children are ready. Removed the unchecked follow-up request
+  that attempted to attach children after the parent already existed.
+- Added Threads carousel creation so multiple attachments are all sent, including
+  per-item alt text. The old adapter silently selected the first attachment.
+- Processing is checked once a minute, with a bounded timeout. Failed, expired,
+  malformed or unfinished containers cannot proceed to publish. Authentication
+  and HTTP failures propagate instead of being swallowed by the polling loop.
+- Post links now come from Meta's `permalink` field. A failed optional link lookup
+  keeps the confirmed post ID and cannot cause a successful post to be retried.
+  A publish response missing its ID is treated as an uncertain outcome, preserving
+  the pipeline's duplicate guard.
+- Instagram's advertised carousel limit now matches the connector's existing
+  ten-item validation. Images omit the unsupported `media_type=IMAGE` argument;
+  container/publish requests use form-encoded parameters.
+- Added 17 HTTP fixture regressions using actual Meta response field names,
+  covering single posts, mixed-media carousels, processing delays/failures,
+  authorization failures, malformed responses and permalink lookup failure.
+  All 46 worker tests and 21 provider-core tests pass. These tests make no real
+  social posts; public publishing acceptance still requires a reviewed test post.
+
+Primary protocol references: [Meta Instagram API collection](https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api?entity=request-23987686-66f145c2-29b1-4d97-afbd-5710369027c0),
+[Meta Threads API collection](https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api?entity=request-34203612-ee0a2365-9d95-4cbe-8087-1cfb04d38c05),
+[Threads container status](https://www.postman.com/meta/threads/request/ohuldvi/check-container-s-publishing-status).
+
 ## Where Claude stopped
 
 Git history shows completed readiness phases 0–3:

@@ -1,4 +1,4 @@
-import { fetchJson, type FetchLike } from "./http.js";
+import { fetchJson, postForm, ProviderHttpError, type FetchLike } from "./http.js";
 
 /**
  * Threads API client (verified 2026-09-30: permissions threads_basic +
@@ -26,20 +26,26 @@ export async function threadsCreateContainer(
     text?: string;
     imageUrl?: string;
     videoUrl?: string;
+    altText?: string;
+    isCarouselItem?: boolean;
+    children?: string[];
   },
   opts?: { fetchImpl?: FetchLike }
 ): Promise<ThreadsContainer> {
-  const body: Record<string, unknown> = { media_type: input.mediaType };
+  const body: Record<string, string> = { media_type: input.mediaType };
   if (input.text) body.text = input.text;
   if (input.imageUrl) body.image_url = input.imageUrl;
   if (input.videoUrl) body.video_url = input.videoUrl;
-  return fetchJson<ThreadsContainer>("Threads", `${GRAPH}/${threadsUserId}/threads`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  if (input.altText) body.alt_text = input.altText;
+  if (input.isCarouselItem) body.is_carousel_item = "true";
+  if (input.children) body.children = input.children.join(",");
+  const result = await postForm<{ id: string }>("Threads", `${GRAPH}/${threadsUserId}/threads`, body, {
+    headers: { Authorization: `Bearer ${accessToken}` },
     timeoutMs: 60_000,
     fetchImpl: opts?.fetchImpl,
   });
+  if (typeof result.id !== "string" || !result.id.trim()) throw new Error("Threads did not return a media container ID.");
+  return { creationId: result.id };
 }
 
 export async function threadsContainerStatus(
@@ -47,11 +53,12 @@ export async function threadsContainerStatus(
   accessToken: string,
   creationId: string,
   opts?: { fetchImpl?: FetchLike }
-): Promise<{ statusCode: "IN_PROGRESS" | "FINISHED" | "EXPIRED" | "ERROR" }> {
-  return fetchJson("Threads", `${GRAPH}/${creationId}?fields=status`, {
+): Promise<{ statusCode: "IN_PROGRESS" | "FINISHED" | "EXPIRED" | "ERROR" | "PUBLISHED" }> {
+  const result = await fetchJson<{ status: "IN_PROGRESS" | "FINISHED" | "EXPIRED" | "ERROR" | "PUBLISHED" }>("Threads", `${GRAPH}/${creationId}?fields=status`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     fetchImpl: opts?.fetchImpl,
   });
+  return { statusCode: result.status };
 }
 
 export async function threadsPublish(
@@ -60,12 +67,20 @@ export async function threadsPublish(
   creationId: string,
   opts?: { fetchImpl?: FetchLike }
 ): Promise<{ postId: string }> {
-  return fetchJson<{ id: string }>("Threads", `${GRAPH}/${threadsUserId}/threads_publish`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ creation_id: creationId }),
+  return postForm<{ id: string }>("Threads", `${GRAPH}/${threadsUserId}/threads_publish`, { creation_id: creationId }, {
+    headers: { Authorization: `Bearer ${accessToken}` },
     fetchImpl: opts?.fetchImpl,
-  }).then((r) => ({ postId: r.id }));
+  }).then((r) => {
+    if (typeof r.id !== "string" || !r.id.trim()) throw new ProviderHttpError("Threads did not confirm the published post ID.", 0, "Threads");
+    return { postId: r.id };
+  });
+}
+
+export async function threadsPostPermalink(postId: string, accessToken: string, opts?: { fetchImpl?: FetchLike }): Promise<string | undefined> {
+  const result = await fetchJson<{ permalink?: string }>("Threads", `${GRAPH}/${postId}?fields=permalink`, {
+    headers: { Authorization: `Bearer ${accessToken}` }, fetchImpl: opts?.fetchImpl,
+  });
+  return result.permalink;
 }
 
 export async function threadsDeletePost(

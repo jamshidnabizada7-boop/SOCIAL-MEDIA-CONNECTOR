@@ -64,7 +64,7 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
       aiDisclosure: true,
       brandedContent: true,
       maxCaptionLength: 2200,
-      maxImages: 20,
+      maxImages: 10,
       maxVideoDurationSec: 15 * 60,
       maxVideoBytes: 1024 * 1024 * 1024,
       maxImageBytes: 8 * 1024 * 1024,

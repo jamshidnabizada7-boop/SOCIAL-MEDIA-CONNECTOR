@@ -33,6 +33,7 @@ backup and deployment changes for phase 4. Those changes were continued in place
 
 - [x] Conditional job claims, leases/heartbeats, stale recovery, persisted delays and duplicate guards.
 - [x] Async provider IDs stored immediately; authenticated reconciliation with backoff and terminal outcomes.
+- [x] Meta container ID/status response mapping, carousel creation/readiness, and real permalink handling verified with 17 HTTP fixture regressions.
 - [x] Durable Postgres queue; removed the nonfunctional BullMQ path.
 - [x] TikTok disabled; unsupported real adapters do not fall back to fake success.
 - [x] Media, variants and AI disclosure passed from composer through API to worker.

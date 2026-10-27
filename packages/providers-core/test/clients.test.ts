@@ -310,9 +310,11 @@ describe("phase-5 client request shapes (injected fetch)", () => {
       if (String(url).endsWith("/threads_publish")) return new Response(JSON.stringify({ id: "thpost1" }), { status: 200 });
       return new Response(JSON.stringify({ id: "cont1" }), { status: 200 });
     }) as unknown as typeof fetch;
-    await threadsCreateContainer("thuser", "tok", { mediaType: "TEXT", text: "Hello" }, { fetchImpl: fake });
-    await threadsPublish("thuser", "tok", "cont1", { fetchImpl: fake });
-    expect(calls[0].body).toContain('"media_type":"TEXT"');
+    const container = await threadsCreateContainer("thuser", "tok", { mediaType: "TEXT", text: "Hello" }, { fetchImpl: fake });
+    expect(container.creationId).toBe("cont1");
+    await threadsPublish("thuser", "tok", container.creationId, { fetchImpl: fake });
+    expect(new URLSearchParams(calls[0].body).get("media_type")).toBe("TEXT");
+    expect(new URLSearchParams(calls[1].body).get("creation_id")).toBe("cont1");
     expect(calls[1].url).toContain("threads_publish");
   });
 });
