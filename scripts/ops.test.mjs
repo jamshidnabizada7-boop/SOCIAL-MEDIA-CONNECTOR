@@ -154,6 +154,7 @@ case " $* " in
   *' build '*) exit "\${OPS_BUILD:-0}";;
   *' run --rm --no-deps migrate '*) exit "\${OPS_MIGRATE:-0}";;
   *' --user root '*) exit "\${OPS_STORAGE:-0}";;
+  *' exec -T caddy caddy reload '*) exit "\${OPS_CADDY:-0}";;
 esac`);
   return revision;
 }
@@ -163,6 +164,7 @@ for (const scenario of [
   { name: "migration", env: { OPS_MIGRATE: "7" }, forbidden: /--profile tunnel/, code: 7 },
   { name: "storage permissions", env: { OPS_STORAGE: "9" }, forbidden: /--profile tunnel/, code: 9 },
   { name: "health", env: { OPS_HEALTH: "8" }, forbidden: /exec -T worker/, code: 8 },
+  { name: "gateway reload", env: { OPS_CADDY: "10" }, forbidden: /health http|exec -T worker/, code: 10 },
   { name: "operation lock", env: { OPS_LOCK_STATUS: "1" }, forbidden: /./, code: 1 },
 ]) {
   test(`failed deployment ${scenario.name} keeps verified rollback revisions`, () => fixture((ctx) => {
@@ -184,6 +186,7 @@ test("successful deployment waits for service health and advances rollback revis
   assert.equal(fs.readFileSync(path.join(ctx.dir, "PREVIOUS_REVISION"), "utf8"), "b".repeat(40) + "\n");
   const commands = fs.readFileSync(path.join(ctx.dir, "commands"), "utf8");
   assert.match(commands, /--wait --wait-timeout 150/);
+  assert.match(commands, /exec -T caddy caddy reload --config \/etc\/caddy\/Caddyfile --adapter caddyfile/);
   assert.match(commands, /http:\/\/127\.0\.0\.1:18080\/signin/);
   assert.equal(ctx.run("deploy/apply-release.sh", [revision]).status, 0);
   assert.equal(fs.readFileSync(path.join(ctx.dir, "PREVIOUS_REVISION"), "utf8"), "b".repeat(40) + "\n");

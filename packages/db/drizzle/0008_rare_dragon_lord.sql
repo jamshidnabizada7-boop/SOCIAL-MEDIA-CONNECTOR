@@ -1,0 +1,2 @@
+ALTER TABLE "social_accounts" ADD CONSTRAINT "social_accounts_id_workspace_unique" UNIQUE("id","workspace_id");--> statement-breakpoint
+ALTER TABLE "social_inbox_items" ADD CONSTRAINT "social_inbox_items_account_id_workspace_id_social_accounts_id_workspace_id_fk" FOREIGN KEY ("account_id","workspace_id") REFERENCES "public"."social_accounts"("id","workspace_id") ON DELETE cascade ON UPDATE no action;

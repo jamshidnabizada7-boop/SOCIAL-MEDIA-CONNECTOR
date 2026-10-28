@@ -29,6 +29,9 @@ if [ "${ARIA_TUNNEL_MODE:-compose}" = external ]; then
 else
   compose --profile tunnel up -d --wait --wait-timeout 150 --remove-orphans
 fi
+# Bind-mounted configuration changes do not recreate an existing Caddy
+# container. Reload atomically before accepting this release as healthy.
+compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
 curl --retry 5 --retry-delay 2 --retry-connrefused --max-time 10 -fsS http://127.0.0.1:18080/health >/dev/null
 curl --retry 5 --retry-delay 2 --retry-connrefused --max-time 10 -fsS http://127.0.0.1:18080/signin >/dev/null
 compose exec -T worker node -e "fetch('http://127.0.0.1:4101/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

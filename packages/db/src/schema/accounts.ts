@@ -65,6 +65,7 @@ export const socialAccounts = pgTable(
   },
   (t) => [
     unique("social_accounts_unique").on(t.workspaceId, t.providerId, t.externalAccountId),
+    unique("social_accounts_id_workspace_unique").on(t.id, t.workspaceId),
     index("social_accounts_workspace_idx").on(t.workspaceId),
   ]
 );

@@ -34,7 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/posts", label: "Posts", icon: FolderOpen, section: "workspace" },
   { href: "/content", label: "Content", icon: FolderOpen, section: "workspace" },
   { href: "/analytics", label: "Analytics", icon: BarChart3, section: "workspace" },
-  { href: "/inbox", label: "Inbox", icon: Inbox, section: "workspace", disabled: true, disabledNote: "Coming after publishing is solid" },
+  { href: "/inbox", label: "Inbox", icon: Inbox, section: "workspace" },
   { href: "/accounts", label: "Social accounts", icon: ShieldCheck, section: "configure" },
   { href: "/team", label: "Team", icon: Users, section: "configure" },
   { href: "/settings", label: "Settings", icon: Settings, section: "configure" },

@@ -1,7 +1,7 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { blueskyAdapter } from "../src/adapters/bluesky.js";
 import { mastodonAdapter } from "../src/adapters/mastodon.js";
-import { getAdapter, usesRealCredentials } from "../src/adapters/registry.js";
+import { assertAdapterMode, getAdapter, usesRealCredentials } from "../src/adapters/registry.js";
 
 const baseInput = (caption: string, media: Array<{ kind: "image" | "video" | "document"; filename: string }> = []) => ({
   content: { caption, media: media.map((m) => ({ ...m, mediaId: "m1", bytes: 1000 })) },
@@ -60,6 +60,15 @@ describe("bluesky adapter", () => {
     const err = blueskyAdapter.validateContent(input);
     expect(err?.code).toBe("image_too_large");
   });
+});
+
+it("refuses simulated delivery in production, both at startup and adapter lookup", () => {
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("ARIA_ADAPTER_MODE", "mock");
+  try {
+    expect(assertAdapterMode).toThrow("forbidden in production");
+    expect(() => getAdapter("facebook")).toThrow("forbidden in production");
+  } finally { vi.unstubAllEnvs(); }
 });
 
 

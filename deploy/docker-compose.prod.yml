@@ -129,7 +129,9 @@ services:
       - api
       - web
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Mount the directory: release extraction can replace the file's inode.
+      # A single-file bind would keep serving the old config after reload.
+      - ./:/etc/caddy:ro
     ports:
       # 8080 belongs to the older v1 install on this host — use 18080.
       - "127.0.0.1:${ARIA_GATEWAY_BIND_PORT:-18080}:8080"

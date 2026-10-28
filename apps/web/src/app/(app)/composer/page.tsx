@@ -641,7 +641,7 @@ function ComposerInner() {
                 <p className="mt-2 text-[13px] font-medium">
                   Drop images or video here, paste from clipboard, or <span className="text-accent-ink">browse</span>
                 </p>
-                <p className="mt-0.5 text-[12px] text-ink-3">JPG, PNG, WebP, MP4, MOV — up to 10 GB</p>
+                <p className="mt-0.5 text-[12px] text-ink-3">JPG, PNG, WebP, MP4, MOV — up to 50 MB per file</p>
                 <input
                   id="composer-file"
                   type="file"

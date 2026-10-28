@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { roleHasPermission, ROLE_PERMISSIONS, type Permission, type Role } from "@aria/shared-types";
+import {
+  roleHasPermission,
+  ROLE_PERMISSIONS,
+  type Permission,
+  type Role,
+} from "@aria/shared-types";
 
 describe("RBAC permission matrix", () => {
   it("gives the owner every permission", () => {
@@ -14,13 +19,17 @@ describe("RBAC permission matrix", () => {
       "manage_team",
       "manage_billing",
       "manage_workspace",
+      "view_inbox",
+      "reply_inbox",
+      "manage_inbox",
     ];
     for (const p of all) expect(roleHasPermission("owner", p)).toBe(true);
   });
 
   it("restricts billing to owner only", () => {
     const roles: Role[] = ["admin", "manager", "editor", "approver", "viewer"];
-    for (const r of roles) expect(roleHasPermission(r, "manage_billing")).toBe(false);
+    for (const r of roles)
+      expect(roleHasPermission(r, "manage_billing")).toBe(false);
   });
 
   it("lets editors create but not publish", () => {
@@ -34,8 +43,10 @@ describe("RBAC permission matrix", () => {
     expect(roleHasPermission("approver", "create_posts")).toBe(false);
   });
 
-  it("gives viewers only analytics", () => {
-    expect(ROLE_PERMISSIONS.viewer).toEqual(["view_analytics"]);
+  it("gives viewers analytics and inbox reading without reply or handling rights", () => {
+    expect(ROLE_PERMISSIONS.viewer).toEqual(["view_inbox", "view_analytics"]);
+    expect(roleHasPermission("viewer", "reply_inbox")).toBe(false);
+    expect(roleHasPermission("viewer", "manage_inbox")).toBe(false);
   });
 
   it("never grants publish to viewers or approvers", () => {

@@ -21,7 +21,7 @@ export interface MailResult {
   delivered: boolean;
 }
 
-type Transport = { sendMail(msg: MailMessage & { from: string }): Promise<unknown> };
+type Transport = { sendMail(msg: MailMessage & { from: string; replyTo?: string }): Promise<unknown> };
 let transport: Transport | null | undefined;
 
 async function getTransport(): Promise<Transport | null> {
@@ -59,7 +59,7 @@ export async function sendMail(log: FastifyBaseLogger, msg: MailMessage): Promis
     return { delivered: false };
   }
   try {
-    await t.sendMail({ from: process.env.MAIL_FROM ?? "Aria Hub <no-reply@localhost>", ...msg });
+    await t.sendMail({ from: process.env.MAIL_FROM ?? "Aria Hub <no-reply@localhost>", replyTo: process.env.MAIL_REPLY_TO || undefined, ...msg });
     return { delivered: true };
   } catch (err) {
     log.error({ err, to: msg.to, subject: msg.subject }, "email delivery failed");

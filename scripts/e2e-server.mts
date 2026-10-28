@@ -29,6 +29,9 @@ console.log("E2E migrations complete");
 await handle.close();
 
 const records: unknown[] = [];
+const inboxReplies = new Map<string, unknown>();
+const inboxAt = new Date().toISOString();
+const incomingPost = { uri: "at://did:plc:friend/app.bsky.feed.post/question", cid: "fixture-question", author: { did: "did:plc:friend", handle: "friend.bsky.social", displayName: "Inbox Friend" }, record: { text: "Can you share the onboarding guide?", createdAt: inboxAt } };
 let uploads = 0;
 const fixture = createServer(async (req, res) => {
   const chunks: Buffer[] = [];
@@ -37,7 +40,16 @@ const fixture = createServer(async (req, res) => {
   res.setHeader("content-type", "application/json");
   const send = (value: unknown) => res.end(JSON.stringify(value));
   switch (req.url?.split("?")[0]) {
-    case "/_stats": return send({ records, uploads });
+    case "/_stats": return send({ records, uploads, inboxReplies: [...inboxReplies.values()] });
+    case "/xrpc/app.bsky.notification.listNotifications":
+      return send({ notifications: [{ ...incomingPost, reason: "mention", indexedAt: inboxAt }] });
+    case "/xrpc/app.bsky.feed.getPostThread":
+      return send({ thread: { post: incomingPost, replies: [] } });
+    case "/xrpc/com.atproto.repo.putRecord": {
+      const body = JSON.parse(bytes.toString());
+      inboxReplies.set(body.rkey, body);
+      return send({ uri: `at://did:plc:e2e/app.bsky.feed.post/${body.rkey}`, cid: `fixture-${body.rkey}` });
+    }
     case "/xrpc/com.atproto.server.createSession":
     case "/xrpc/com.atproto.server.refreshSession":
       return send({ accessJwt: "fixture-access", refreshJwt: "fixture-refresh", did: "did:plc:e2e", handle: "e2e.bsky.social" });

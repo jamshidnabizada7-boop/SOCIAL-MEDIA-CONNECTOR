@@ -763,8 +763,8 @@ export interface AnalyticsSeed {
   /** live = served from real data (deliveries/followers); demo = seeded demo metrics */
   mode?: "demo" | "live";
   overview: { impressions: number | null; engagements: number | null; followers: number; clicks: number | null };
-  deltas: { impressions: number; engagements: number; followers: number; clicks: number };
-  series: { date: string; impressions: number; engagements: number }[];
+  deltas: { impressions: number | null; engagements: number | null; followers: number | null; clicks: number | null };
+  series: { date: string; impressions: number; engagements: number | null }[];
   byNetwork: {
     provider: ProviderId;
     accountName: string;

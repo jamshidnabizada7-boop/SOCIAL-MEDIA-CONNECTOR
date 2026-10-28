@@ -12,6 +12,7 @@ import {
   type ProviderOAuthConfig,
 } from "./config.js";
 import { getProviderCredentials } from "./db-credentials.js";
+import { INBOX_OAUTH_SCOPES } from "./engagement/capabilities.js";
 
 export interface PkcePair {
   verifier: string;
@@ -37,7 +38,7 @@ export interface AuthorizeUrlResult {
 /** Builds the provider authorization URL (PKCE where the provider requires it). */
 export async function buildAuthorizeUrl(
   provider: ProviderId,
-  opts?: { instanceUrl?: string; db?: AriaDatabase }
+  opts?: { instanceUrl?: string; db?: AriaDatabase; access?: "publishing" | "inbox" }
 ): Promise<AuthorizeUrlResult> {
   if (provider === "mastodon") {
     if (!opts?.instanceUrl) throw new Error("Mastodon connect requires an instance URL");
@@ -66,7 +67,8 @@ export async function buildAuthorizeUrl(
   url.searchParams.set(cfg.clientIdParam ?? "client_id", creds.clientId);
   url.searchParams.set("redirect_uri", redirectUriFor(provider));
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", cfg.scopes.join(cfg.id === "tiktok" ? "," : " "));
+  const scopes = [...new Set([...cfg.scopes, ...(opts?.access === "inbox" ? INBOX_OAUTH_SCOPES[provider] ?? [] : [])])];
+  url.searchParams.set("scope", scopes.join(cfg.id === "tiktok" ? "," : " "));
   const state = createState();
   url.searchParams.set("state", state);
   let codeVerifier: string | undefined;

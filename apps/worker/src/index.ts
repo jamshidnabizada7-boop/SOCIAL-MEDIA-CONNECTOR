@@ -5,9 +5,11 @@ import pino from "pino";
 import { assertEncryptionKey } from "@aria/db";
 import { flagExpiringTokens, refreshExpiringTokens } from "@aria/providers-core";
 import { workerConfig } from "./config.js";
+import { assertAdapterMode } from "./adapters/registry.js";
 import { openDatabase, processPublishJob, processReconcileJob } from "./pipeline/publish.js";
 import { claimJobs, heartbeat, jobOutcome, LEASE_MS, type ClaimedJob } from "./pipeline/jobs.js";
 import { runMaintenance } from "./maintenance.js";
+import { inboxTick, retainInbox } from "./inbox.js";
 import { ingestMetrics } from "./metrics.js";
 import { captureError, flushTelemetry } from "./telemetry.js";
 import { createOperationsMonitor, reportOperationsAlert } from "./alerts.js";
@@ -19,6 +21,7 @@ const IDLE_POLL_MS = 2_000;
 const BUSY_POLL_MS = 250;
 
 async function main() {
+  assertAdapterMode();
   if (process.env.NODE_ENV === "production") assertEncryptionKey();
   const handle = await openDatabase();
   logger.info({ driver: handle.driver, workerId: WORKER_ID, concurrency: workerConfig.WORKER_CONCURRENCY }, "worker starting");
@@ -72,6 +75,14 @@ async function main() {
   };
   void loop();
 
+  let inboxFlight: Promise<void> | undefined;
+  const runInbox = () => {
+    if (stopping || inboxFlight) return;
+    inboxFlight = inboxTick(handle.db).catch(() => logger.warn("inbox cycle failed; durable work will be retried")).finally(() => { inboxFlight = undefined; });
+  };
+  const inboxTimer = setInterval(runInbox, 5000);
+  runInbox();
+
   // Connection monitor (plan §25/§7): renew tokens a day ahead so a 3 a.m.
   // post never waits on a refresh; flag the ones that can't renew themselves.
   const monitor = async () => {
@@ -90,6 +101,7 @@ async function main() {
   const maintenance = async () => {
     try {
       const result = await runMaintenance(handle.db);
+      await retainInbox(handle.db);
       logger.info(result, "maintenance");
     } catch (err) {
       logger.error({ err }, "maintenance failed");
@@ -137,12 +149,13 @@ async function main() {
     stopping = true;
     logger.info({ signal, inFlight: inFlight.size }, "shutting down — finishing in-flight jobs");
     clearInterval(monitorTimer);
+    clearInterval(inboxTimer);
     clearInterval(maintenanceTimer);
     clearInterval(metricsTimer);
     clearInterval(operationsTimer);
     health.close();
     // Unfinished jobs keep their lease and are recovered by the next worker.
-    await Promise.race([Promise.allSettled(inFlight.values()), new Promise((r) => setTimeout(r, 25_000))]);
+    await Promise.race([Promise.allSettled([...inFlight.values(), ...(inboxFlight ? [inboxFlight] : [])]), new Promise((r) => setTimeout(r, 25_000))]);
     await handle.close();
     await flushTelemetry();
     process.exit(0);

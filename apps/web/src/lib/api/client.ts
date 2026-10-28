@@ -5,10 +5,12 @@
  * (SameSite=Lax, httpOnly) — requests must include credentials.
  */
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4100";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "production" ? "" : "http://localhost:4100");
 
 export const DATA_MODE: "mock" | "api" =
-  process.env.NEXT_PUBLIC_DATA_MODE === "api" ? "api" : "mock";
+  process.env.NEXT_PUBLIC_DATA_MODE === "mock" ? "mock" :
+    process.env.NEXT_PUBLIC_DATA_MODE === "api" || process.env.NODE_ENV === "production" ? "api" : "mock";
 
 export class ApiError extends Error {
   constructor(
@@ -40,13 +42,19 @@ export async function apiFetch<T>(
       },
     });
   } catch (err) {
-    throw new ApiError(0, "network", "Could not reach the Aria API. Is `npm run dev:api` running?");
+    throw new ApiError(0, "network", "Could not reach the server. Check your connection and try again.");
   } finally {
     clearTimeout(timer);
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  const body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  let body: Record<string, unknown>;
+  try {
+    body = text ? JSON.parse(text) as Record<string, unknown> : {};
+    if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("invalid response");
+  } catch {
+    throw new ApiError(res.status, "invalid_response", "The server returned an unreadable response. Please try again.");
+  }
   if (!res.ok) {
     const err = (body.error ?? {}) as { code?: string; message?: string };
     throw new ApiError(res.status, err.code ?? "error", err.message ?? res.statusText);

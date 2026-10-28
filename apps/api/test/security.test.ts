@@ -163,6 +163,15 @@ describe("tenant isolation", () => {
   });
 });
 
+it("does not claim a confirmation email was sent when the transport fails", async () => {
+  const actor = await signup("mail-failure@sec.test");
+  const { sendMail } = await import("../src/lib/mailer.js");
+  vi.mocked(sendMail).mockResolvedValueOnce({ delivered: false });
+  const response = await app.inject({ method: "POST", url: "/v1/auth/resend-verification", headers: { cookie: actor.cookie, origin: ORIGIN } });
+  expect(response.statusCode).toBe(503);
+  expect(response.json().error.code).toBe("email_unavailable");
+});
+
 describe("invitations", () => {
   let bob: Actor;
   let inviteToken = "";

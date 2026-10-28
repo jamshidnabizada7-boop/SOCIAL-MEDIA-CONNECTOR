@@ -11,6 +11,12 @@ legal operator details and real-platform approvals/testing still need setup.
 See [the current handoff](docs/PROJECT-STATUS.md) and
 [the readiness plan](docs/PRODUCTION-READINESS-PLAN.md).
 
+**Live update — 28 October:** Unified Social Inbox and the mobile navigation
+repair are deployed on Oracle at [the Inbox](https://app.myariahub.com/inbox),
+release `60aaa87`. See the
+[Inbox implementation and verification report](docs/SOCIAL-INBOX.md) for exact
+provider coverage, migration, deployment checks and remaining permission requirements.
+
 ## Repository
 
 | Path | Purpose |
@@ -18,7 +24,7 @@ See [the current handoff](docs/PROJECT-STATUS.md) and
 | `apps/web` | Next.js 16 UI; API mode for real data, mock mode for demos |
 | `apps/api` | Fastify 5: sessions, workspaces, permissions, accounts, posts, media, billing, admin |
 | `apps/worker` | Durable job claims/leases, real adapters, reconciliation, token refresh, maintenance and alerts |
-| `packages/db` | Drizzle schema (35 tables), migrations, seeds and encrypted credential vault |
+| `packages/db` | Drizzle schema (41 tables), migrations, seeds and encrypted credential vault |
 | `packages/providers-core` | OAuth, provider HTTP clients, token refresh and supported analytics ingestion |
 | `packages/media-core` | File inspection and shared local-disk storage |
 | `packages/shared-types` | Contracts, provider capabilities, scheduling and telemetry sanitization |
@@ -32,10 +38,12 @@ at `/opt/ariahub-v2` on Oracle: the frontend, API, worker, provider clients,
 database schema and migrations, shared packages, tests, Docker files and
 deployment/recovery tooling. Its full development history is included.
 
-The exact Oracle application revision is
+The previous Oracle application revision is
 [`oracle-b831ae2`](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/tree/oracle-b831ae2).
-A SHA-256 comparison verified all 272 files in that revision against the Oracle
-installation. The `master` branch also includes newer handoff documentation.
+A SHA-256 comparison verified all 272 files in that earlier revision against the Oracle
+installation. The current Inbox release is
+[`oracle-inbox-60aaa87`](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/tree/oracle-inbox-60aaa87).
+The Inbox branch also includes newer deployment documentation.
 
 [Download the complete Oracle source as a ZIP](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/archive/refs/tags/oracle-b831ae2.zip).
 
