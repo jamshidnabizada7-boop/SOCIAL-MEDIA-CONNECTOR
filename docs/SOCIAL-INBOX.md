@@ -248,7 +248,28 @@ provider feature is available. Five providers have code integrations, not blanke
 production approval. The remaining five inbox integrations are explicitly not
 implemented. Production deployment was subsequently requested and performed as follows.
 
-## Oracle deployment — 28 October 2026
+## Current live acceptance — 28 October 2026
+
+Application revision `df68e345` supersedes the initial deployment below. Its exact
+revision passed full application/container CI and is live on Oracle. A real Aria
+Hub Facebook post was published by the worker on its first attempt. An actual
+owner comment synchronized into Inbox; the signed-in Inbox UI sent one reply,
+confirmed on attempt 1 with matching native Meta readback. This is live evidence,
+separate from the HTTP fixtures above.
+
+Both Instagram accounts now have provider-verified `instagram_manage_comments`
+after the user's approved authorization flow, and their worker syncs are healthy.
+Publishing to @aria___hub passed on attempt 1; the actual engagement adapter sent
+and read back a reply to a self-authored comment on that test media. The full
+incoming Instagram comment → Inbox UI → worker reply path and Little Moments
+outgoing acceptance remain untested. Threads' developer app is published and
+configured, but its account login is incomplete and Threads Inbox is unsupported.
+
+The [dated production verification report](PRODUCTION-VERIFICATION-2026-10-28.md)
+contains receipt IDs, backup/monitoring evidence and remaining public approval
+gates. The following section preserves the earlier rollout record.
+
+## Initial Oracle deployment — 28 October 2026
 
 On the user's explicit "MAKE IT LIVE ON ORACLE" instruction, deployed
 `60aaa87fe70175a3f77e377aeefdd0050343b336` to `/opt/ariahub-v2` using the committed

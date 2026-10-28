@@ -35,6 +35,22 @@ Only upload `.ariabak` files. The matching `.key` file is required for recovery 
 
 ## Recovery validation
 
+The GitHub schedule uses minute offsets 7, 22, 37 and 52. After no scheduled run
+appeared for four hours, the cron declaration was updated on the default branch.
+This follows [GitHub's trigger troubleshooting](https://docs.github.com/en/actions/how-tos/troubleshoot-workflows)
+guidance to avoid busy hour boundaries and refresh the schedule's actor. This is
+a mitigation; execution remains unverified until an actual scheduled run appears.
+
+On 28 October, `ariahub-v2-monitor.timer` was installed/enabled on Oracle and its
+service passed all eight checks. GitHub manual run `40666530803` passed all five
+public probes and accepted the test email through SMTP. A scheduled GitHub run
+has not yet been observed; the workflow is active on the default branch.
+
+The fresh encrypted Drive copy of `backup-20261028T133636Z` was downloaded,
+SHA-256 verified and restored in a network-isolated PostgreSQL 16 container:
+41 tables, nine migrations, nine decryptable credential envelopes and four media
+files with matching original checksums. Production was not restored.
+
 Download the exact encrypted Drive file, compare its SHA-256 with the export record, authenticate/decrypt the bundle and validate both snapshot manifest hashes. Restore the database into a throwaway PostgreSQL container with networking disabled; confirm table/migration counts and decryption of recovered credential envelopes. Verify media checksums too. Delete only that temporary container after verification.
 
 Use `deploy/check-snapshot.sh` and the restore section in `deploy/DEPLOY.md` for a service recovery. A production restore pauses publishing until post-snapshot external deliveries have been reconciled; restoring a database cannot remove posts or replies already sent to a social network.
