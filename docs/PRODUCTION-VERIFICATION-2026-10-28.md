@@ -12,7 +12,7 @@ Aria Hub is live on Oracle. This audit verifies specific boundaries; it does not
 - API/proxy failures return a readable error instead of exposing a JSON parse failure or development-server instructions.
 - Confirmation-email resend returns an error when the mail transport fails. Configured support replies use `MAIL_REPLY_TO`.
 - The privacy page describes the Inbox data collected and its configured retention limits.
-- Public gateway checks found HTTP pages served without redirect and no web-page HSTS. Caddy now redirects Cloudflare's HTTP visitors to HTTPS and supplies HSTS for web/API/assets. Deployment explicitly reloads bind-mounted Caddy configuration; a failed reload cannot advance the verified revision.
+- Public gateway checks found HTTP pages served without redirect and no web-page HSTS. Caddy now redirects Cloudflare's HTTP visitors to HTTPS and supplies HSTS for web/API/assets. The config directory is mounted because release extraction replaces file inodes; the former single-file mount retained old content even after reload. Deployment explicitly reloads Caddy configuration; a failed reload cannot advance the verified revision.
 
 ## Executed local checks
 
