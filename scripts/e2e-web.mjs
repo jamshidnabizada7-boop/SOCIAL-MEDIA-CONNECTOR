@@ -3,7 +3,7 @@ import path from "node:path";
 import { cpSync } from "node:fs";
 
 const env = {
-  ...process.env, NEXT_PUBLIC_DATA_MODE: "api", NEXT_PUBLIC_API_URL: "http://127.0.0.1:4180",
+  ...process.env, NEXT_PUBLIC_DATA_MODE: process.argv.includes("--demo") ? "mock" : "api", NEXT_PUBLIC_API_URL: "http://127.0.0.1:4180",
   NEXT_PUBLIC_SENTRY_DSN: "", SENTRY_DSN: "", NEXT_TELEMETRY_DISABLED: "1",
 };
 const cli = path.resolve("node_modules/next/dist/bin/next");

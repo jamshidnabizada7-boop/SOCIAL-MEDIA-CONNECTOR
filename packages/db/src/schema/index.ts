@@ -6,3 +6,4 @@ export * from "./platform.js";
 export * from "./oauth.js";
 export * from "./app-configs.js";
 export * from "./reliability.js";
+export * from "./inbox.js";

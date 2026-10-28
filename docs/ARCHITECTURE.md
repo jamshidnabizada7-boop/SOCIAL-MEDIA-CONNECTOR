@@ -1,7 +1,7 @@
 # Aria Hub architecture
 
 The product has a Next.js web app, Fastify HTTP API, and publishing worker. The
-current implementation has 35 Drizzle tables and nine real publishing adapters.
+current source has 41 Drizzle tables and nine real publishing adapters.
 TikTok is disabled. Production uses Node 24/22, Postgres 16, shared media storage,
 Caddy and an optional named Cloudflare Tunnel.
 
@@ -55,6 +55,19 @@ non-root users; the web runtime uses Next.js standalone output.
   reconnect requirements are visible per destination.
 - Text/media variants and signed, expiring public media URLs support platform
   requirements. Instagram/Threads need publicly reachable HTTPS media URLs.
+
+## Social Inbox
+
+`/inbox` uses normalized workspace-scoped items/messages, per-user category
+preferences, a durable reply ledger and leased account sync state. The existing
+worker runs bounded Inbox cycles independently of publishing jobs. Five adapters
+cover supported Bluesky/Mastodon activity and YouTube/Facebook/Instagram comments;
+exact scope/history/reply limits are in [the Inbox report](SOCIAL-INBOX.md).
+Signed Meta webhooks durably wake account polling after signature verification
+and deduplication; raw payloads are discarded. API/browser reads use stored data.
+Replies require a provider confirmation ID; ambiguous delivery becomes unknown
+and cannot be blindly retried. Operational notifications remain on their existing
+service. This new source is awaiting deployment and live provider acceptance.
 
 ## Security and operations
 

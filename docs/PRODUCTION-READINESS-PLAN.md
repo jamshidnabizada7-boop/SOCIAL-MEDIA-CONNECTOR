@@ -4,6 +4,16 @@ Updated 2026-10-26 after resuming Claude's work. See [PROJECT-STATUS.md](PROJECT
 for the handoff and verification evidence. Checked boxes mean implemented and
 locally checked, not approved by a social platform or deployed to production.
 
+## Social Inbox source update — 28 October
+
+- [x] Workspace-scoped Inbox UI/API, independent handling states, team assignments, bulk actions and user category preferences.
+- [x] Durable sync/reply work in the existing worker, five real provider integrations and signed Meta webhook wakeups; bounded history and unsupported capabilities documented.
+- [x] Fix the stuck mobile navigation overlay, scrolling and keyboard dismissal/focus behavior.
+- [ ] Validate new Inbox migrations in isolated PostgreSQL staging and perform owned-account live provider acceptance with required grants/app approvals.
+- [ ] Deploy the reviewed Inbox branch when explicitly requested; Oracle remains on its existing revision.
+
+See [SOCIAL-INBOX.md](SOCIAL-INBOX.md) for exact coverage and executed checks.
+
 ## Recovery point
 
 Claude's last completed commit was `32a4e4a` (Phase 3: product completeness).

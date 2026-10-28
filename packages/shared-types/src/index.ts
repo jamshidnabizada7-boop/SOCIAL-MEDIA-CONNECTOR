@@ -1,5 +1,6 @@
 export { redactTelemetryText, sanitizeTelemetryEvent } from "./telemetry.js";
 export { formatDateTimeInZone, localDateTimeToUtc } from "./scheduling.js";
+export * from "./inbox.js";
 
 /**
  * Aria Hub — shared data contracts.
@@ -480,6 +481,9 @@ export interface AuditEntry {
 /* ------------------------------------------------------------------ */
 
 export type Permission =
+  | "view_inbox"
+  | "reply_inbox"
+  | "manage_inbox"
   | "connect_accounts"
   | "disconnect_accounts"
   | "create_posts"
@@ -493,6 +497,7 @@ export type Permission =
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   owner: [
+    "view_inbox", "reply_inbox", "manage_inbox",
     "connect_accounts",
     "disconnect_accounts",
     "create_posts",
@@ -505,6 +510,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "manage_workspace",
   ],
   admin: [
+    "view_inbox", "reply_inbox", "manage_inbox",
     "connect_accounts",
     "disconnect_accounts",
     "create_posts",
@@ -515,10 +521,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "manage_team",
     "manage_workspace",
   ],
-  manager: ["connect_accounts", "disconnect_accounts", "create_posts", "edit_posts", "publish_posts", "approve_posts", "view_analytics"],
-  editor: ["create_posts", "edit_posts", "view_analytics"],
-  approver: ["approve_posts", "view_analytics"],
-  viewer: ["view_analytics"],
+  manager: ["view_inbox", "reply_inbox", "manage_inbox", "connect_accounts", "disconnect_accounts", "create_posts", "edit_posts", "publish_posts", "approve_posts", "view_analytics"],
+  editor: ["view_inbox", "reply_inbox", "create_posts", "edit_posts", "view_analytics"],
+  approver: ["view_inbox", "approve_posts", "view_analytics"],
+  viewer: ["view_inbox", "view_analytics"],
 };
 
 export function roleHasPermission(role: Role, permission: Permission): boolean {

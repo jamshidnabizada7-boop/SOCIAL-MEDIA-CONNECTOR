@@ -28,6 +28,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       # The browser harness builds the web app in API mode and runs isolated services.
       - run: npm run test:e2e
+      - run: npm run test:e2e:demo
       - run: npm run test:load
       - uses: actions/upload-artifact@v4
         if: always()

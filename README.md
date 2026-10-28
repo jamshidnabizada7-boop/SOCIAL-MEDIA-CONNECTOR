@@ -11,6 +11,12 @@ legal operator details and real-platform approvals/testing still need setup.
 See [the current handoff](docs/PROJECT-STATUS.md) and
 [the readiness plan](docs/PRODUCTION-READINESS-PLAN.md).
 
+**New work awaiting deployment:** Unified Social Inbox and mobile navigation
+repair are implemented on `codex/social-inbox`. See the
+[Inbox implementation and verification report](docs/SOCIAL-INBOX.md) for exact
+provider coverage, migration and setup requirements. This feature has not changed
+the Oracle deployment.
+
 ## Repository
 
 | Path | Purpose |
@@ -18,7 +24,7 @@ See [the current handoff](docs/PROJECT-STATUS.md) and
 | `apps/web` | Next.js 16 UI; API mode for real data, mock mode for demos |
 | `apps/api` | Fastify 5: sessions, workspaces, permissions, accounts, posts, media, billing, admin |
 | `apps/worker` | Durable job claims/leases, real adapters, reconciliation, token refresh, maintenance and alerts |
-| `packages/db` | Drizzle schema (35 tables), migrations, seeds and encrypted credential vault |
+| `packages/db` | Drizzle schema (41 tables), migrations, seeds and encrypted credential vault |
 | `packages/providers-core` | OAuth, provider HTTP clients, token refresh and supported analytics ingestion |
 | `packages/media-core` | File inspection and shared local-disk storage |
 | `packages/shared-types` | Contracts, provider capabilities, scheduling and telemetry sanitization |

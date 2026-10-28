@@ -1,5 +1,10 @@
 # Project handoff — 27 October 2026
 
+**28 October source update:** `codex/social-inbox` adds the Unified Social Inbox
+and repairs stuck mobile navigation. It has not been deployed. The installation
+status below still describes Oracle. See [SOCIAL-INBOX.md](SOCIAL-INBOX.md) for
+the new migrations, provider limits, verification evidence and rollout requirements.
+
 **The application is deployed on Oracle at https://app.myariahub.com.
 Container, restore, public health and browser checks pass. Email, offsite backup,
 monitoring and real-platform acceptance still need external setup.**

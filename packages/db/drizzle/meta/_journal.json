@@ -50,6 +50,20 @@
       "when": 1793003328311,
       "tag": "0006_known_karma",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793163886653,
+      "tag": "0007_complex_slayback",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793165338262,
+      "tag": "0008_rare_dragon_lord",
+      "breakpoints": true
     }
   ]
 }

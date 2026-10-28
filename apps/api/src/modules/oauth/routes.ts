@@ -6,6 +6,7 @@ import {
   oauthCredentials,
   oauthStates,
   socialAccounts,
+  socialSyncState,
   workspaceMembers,
   workspaces,
 } from "@aria/db";
@@ -23,6 +24,7 @@ import {
   DEFAULT_BLUESKY_INSTANCE,
   fetchProfile,
   mastodonInstanceInfo,
+  grantedMetaInboxScopes,
 } from "@aria/providers-core";
 import { requireAuth, requireWorkspacePermission } from "../../plugins/auth.js";
 import { connectionOption } from "./availability.js";
@@ -37,6 +39,7 @@ const authorizeQuery = z.object({
   workspaceId: workspaceRef,
   brandId: z.string().uuid().optional(),
   instance: z.string().optional(),
+  access: z.enum(["publishing", "inbox"]).default("publishing"),
   /** json → returns {url, state} for SPA handling instead of a 302. */
   format: z.enum(["redirect", "json"]).default("redirect"),
 });
@@ -144,7 +147,7 @@ export function registerOauthRoutes(app: FastifyInstance): void {
     }
 
     try {
-      const { url, state, codeVerifier } = await buildAuthorizeUrl(provider, { instanceUrl: instance, db });
+      const { url, state, codeVerifier } = await buildAuthorizeUrl(provider, { instanceUrl: instance, db, access: parsed.data.access });
       await db.insert(oauthStates).values({
         state,
         providerId: provider,
@@ -200,6 +203,10 @@ export function registerOauthRoutes(app: FastifyInstance): void {
         instanceUrl: stored.instanceUrl ?? undefined,
         db,
       });
+      if (provider === "facebook" || provider === "instagram") {
+        // A failed optional scope check preserves publishing connect, but enables no inbox capability.
+        grant.scopes = await grantedMetaInboxScopes(grant.accessToken).catch(() => []);
+      }
       const profile = await fetchProfile(provider, grant.accessToken, {
         instanceUrl: stored.instanceUrl ?? undefined,
       });
@@ -262,6 +269,7 @@ export function registerOauthRoutes(app: FastifyInstance): void {
               followers: p.followers ?? 0,
               connection: "healthy",
               connectionNote: null,
+              scopes: grant.scopes ?? [],
               lastRefreshedAt: new Date(),
             },
           });
@@ -297,6 +305,7 @@ export function registerOauthRoutes(app: FastifyInstance): void {
               rotatedAt: new Date(),
             },
           });
+        await db.update(socialSyncState).set({ nextSyncAt: new Date() }).where(and(eq(socialSyncState.accountId, accountRow.id), eq(socialSyncState.workspaceId, stored.workspaceId)));
         await writeAudit(db, {
           workspaceId: stored.workspaceId,
           actorUserId: stored.createdBy,

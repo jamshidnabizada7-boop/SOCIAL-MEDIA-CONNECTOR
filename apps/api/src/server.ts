@@ -4,6 +4,7 @@ import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import helmet from "@fastify/helmet";
+import { ZodError } from "zod";
 import { assertEncryptionKey } from "@aria/db";
 import { config, isProd, trustProxySetting } from "./config.js";
 import { openAppDatabase } from "./plugins/db.js";
@@ -14,6 +15,8 @@ import { registerOauthRoutes } from "./modules/oauth/routes.js";
 import { registerAccountRoutes } from "./modules/accounts/routes.js";
 import { registerPostRoutes } from "./modules/posts/routes.js";
 import { registerNotificationRoutes } from "./modules/notifications/routes.js";
+import { registerInboxRoutes } from "./modules/inbox/routes.js";
+import { registerInboxWebhooks } from "./modules/inbox/webhooks.js";
 import { registerMediaRoutes } from "./modules/media/routes.js";
 import { registerWebhookRoutes } from "./modules/webhooks/routes.js";
 import { registerAdminRoutes } from "./modules/admin/routes.js";
@@ -91,6 +94,7 @@ export async function buildServer() {
   });
 
   app.setErrorHandler((error: Error & { statusCode?: number; code?: string; cause?: { code?: string } }, req, reply) => {
+    if (error instanceof ZodError) return reply.status(400).send({ error: { code: "invalid_input", message: error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`).join("; ").slice(0, 1000) } });
     // Postgres 22P02: a malformed id (e.g. not a uuid) in the path — nothing can match it.
     const pgCode = error.code ?? error.cause?.code;
     if (pgCode === "22P02") {
@@ -136,6 +140,8 @@ export async function buildServer() {
   registerAccountRoutes(app);
   registerPostRoutes(app);
   registerNotificationRoutes(app);
+  registerInboxRoutes(app);
+  await registerInboxWebhooks(app);
   registerMediaRoutes(app);
   registerWebhookRoutes(app);
   registerAdminRoutes(app);
