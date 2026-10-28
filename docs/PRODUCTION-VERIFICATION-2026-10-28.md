@@ -29,9 +29,12 @@ These browser/provider checks use isolated databases and fixture HTTP servers. T
 
 ## Live environment and recovery
 
+- Final deployed revision: `a63e4ef2493179c84ba5409b653e9cd3916ca742`, tagged [oracle-verified-a63e4ef](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/tree/oracle-verified-a63e4ef). Both application and container checks passed in [the exact revision's CI run](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/actions/runs/40653401922). Later changes to this report do not change deployed application code.
 - API, worker, web and PostgreSQL containers are healthy. Caddy, the existing named tunnel and nightly local backup timer are running. The independent older Aria Hub deployment was preserved.
+- Live Chromium verification passed with zero page runtime errors: HTTP redirects to HTTPS (301), sign-in/privacy/terms/deletion pages load (200), HSTS/frame/content-type headers are present, private API routes reject unauthenticated requests (401), cross-origin mutation with a deliberately invalid session cookie is rejected (403), unsigned Facebook/Instagram Inbox webhooks are rejected (401), `.env`/Git paths return 404, and unauthenticated Inbox visitors are redirected to sign-in. This browser session was unauthenticated; it did not verify the user's live signed-in UI.
 - One Facebook Page has provider-verified Inbox grants and healthy live read synchronization. A direct authenticated read matched its identity and returned ten owned posts. Both Instagram identities also matched a live authenticated read; both require `instagram_manage_comments` before comment synchronization/reply can work.
 - The older Facebook token was rejected by Meta with HTTP 401 / code 190 / subcode 460 while its stored connection still said healthy. Rechecked the unchanged encrypted credential under a database lock, changed the connection to `needs_reauth`, and recorded an in-app notification and audit event. No credential or permission was replaced.
+- The running worker imported two real Facebook interactions into persistent Inbox storage during verification. No fixture interactions were injected into production.
 - No live publishing deliveries or outgoing Inbox replies were present during this audit. No acceptance post or reply was sent.
 - Found the existing Aria Hub Oracle SMTP configuration under `/etc/aria-hub/account-email.env`. Verified certificate validation, STARTTLS, SMTP authentication and NOOP; then configured this application using that service. Nodemailer's `verify()` also succeeded inside the production API container. No acceptance email was sent; inbox receipt/deliverability is unverified.
 - Sender: `accounts@myariahub.com`; support reply/contact: `info@myariahub.com`. The contact is also published on the [existing Aria Hub press page](https://www.myariahub.com/en/press).
@@ -39,7 +42,7 @@ These browser/provider checks use isolated databases and fixture HTTP servers. T
 - Created quiesced snapshot `backup-20261028T074054Z`. Copied the database/media snapshot and production environment into an AES-256-GCM encrypted bundle on the user's Windows computer, outside the VPS and outside Git. The folder ACL grants access only to the current Windows user. The recovery key is stored separately beside the encrypted file and needs another protected copy.
 - Read the encrypted bundle back from disk, authenticated/decrypted it, verified both snapshot SHA-256 hashes, and restored the downloaded dump into a throwaway PostgreSQL 16 container with networking disabled. Verified 41 application tables, 9 migrations, 4 users and 8 decryptable credential envelopes. Removed the temporary container afterward; production data was not restored.
 - Private copy and instructions: `.local/recovery/RECOVERY.md`. Do not commit recovery material or environment files to the public repository.
-- Disk has about 3.3 GB free (93% used) before this release build. Additional capacity is needed for sustained growth; only unused build cache has been cleared.
+- Disk has about 3.2 GB free (93% used) after the final release and removal of unused Docker build cache. Running images, rollback images, volumes and application data were preserved. Additional capacity is needed for sustained growth.
 
 ## Remaining launch gates
 

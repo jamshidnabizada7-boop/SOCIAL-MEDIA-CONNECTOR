@@ -1,8 +1,21 @@
 # Production readiness — current checklist
 
-Updated 2026-10-26 after resuming Claude's work. See [PROJECT-STATUS.md](PROJECT-STATUS.md)
+Updated 2026-10-28 after the Oracle production audit. See [PROJECT-STATUS.md](PROJECT-STATUS.md)
 for the handoff and verification evidence. Checked boxes mean implemented and
 locally checked, not approved by a social platform or deployed to production.
+
+## Production audit — 28 October
+
+- [x] Deploy hardening release `a63e4ef` and verify its exact revision's application/container CI checks.
+- [x] Block simulated publishing in production and remove live billing/demo fallbacks and false payment confirmation.
+- [x] Verify public HTTPS redirect, HSTS, private-route authentication, CSRF rejection, unsigned-webhook rejection and legal-page content in Chromium without page runtime errors.
+- [x] Verify three live Meta account identities and real Facebook reads; correct the fourth, invalid token to require reconnection. Import two real Facebook interactions.
+- [x] Configure the existing Oracle SMTP sender and validate TLS/authentication from the production API container; fill operator/contact display from existing public business details.
+- [x] Recover a downloaded, encrypted off-server snapshot in isolated PostgreSQL: 41 tables, 9 migrations, 4 users and 8 decryptable credential envelopes.
+- [ ] Confirm actual email receipt, real outgoing social acceptance, automated offsite backups and external alerting before public launch.
+
+The full evidence, remaining gaps and precise verification limits are in
+[PRODUCTION-VERIFICATION-2026-10-28.md](PRODUCTION-VERIFICATION-2026-10-28.md).
 
 ## Social Inbox source update — 28 October
 
@@ -63,8 +76,10 @@ backup and deployment changes for phase 4. Those changes were continued in place
 - [x] Profile/settings/team/account/workspace lifecycle flows, legal page implementations.
 - [x] README/architecture/environment docs updated to the actual implementation.
 - [x] Selected time zone honored by scheduling, DST ambiguity/gap checks, live post-status rendering and real author names.
-- [ ] Configure real SMTP and test mail delivery; configure/test Stripe if selling paid plans.
-- [ ] Fill legal operator/contact details and review policies for the intended business/platform registrations.
+- [x] Configure real SMTP and verify TLS/authentication using the existing Aria Hub Oracle service.
+- [ ] Test actual mail receipt; configure/test Stripe if selling paid plans.
+- [x] Fill operator/contact display using existing published Aria Hub business details.
+- [ ] Independently review policies and legal identity for the intended business/platform registrations.
 
 ## Phase 4 — Infrastructure and operations
 
@@ -81,7 +96,8 @@ backup and deployment changes for phase 4. Those changes were continued in place
 - [x] Build/test on the actual Oracle ARM64 target architecture.
 - [x] Preserve and verify Oracle's permanent domains, systemd tunnel and production encryption/database secrets.
 - [x] Enable nightly local backups under systemd at 03:00 UTC; first run succeeded.
-- [ ] Configure SMTP/operator details, rclone/offsite storage, and prove a restore from a downloaded offsite copy in a separate stack.
+- [x] Configure SMTP/operator details and restore a downloaded encrypted off-server copy in a separate stack.
+- [ ] Configure and verify automated rclone/offsite storage; the Windows recovery copy is manual.
 - [ ] Configure external uptime monitoring, Sentry notification rules and backup freshness/failure notifications.
 - [x] Deploy to `/opt/ariahub-v2` on Oracle and confirm API/worker/web health; preserve the separate `/opt/aria-hub` services.
 
