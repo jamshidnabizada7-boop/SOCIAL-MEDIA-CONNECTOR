@@ -18,6 +18,9 @@ cleanup() { compose down -v --remove-orphans; rm -f .env; }
 trap cleanup EXIT
 compose config -q
 compose build migrate web
+# Initialize the shared upload volume through one container, as apply-release.sh
+# does. Concurrent first-use volume copies by api/worker can race in Docker.
+compose run --rm --no-deps --user root --entrypoint sh api -c 'mkdir -p /data/storage && chown node:node /data && chown -R node:node /data/storage'
 compose up -d --wait --wait-timeout 120 postgres api worker web caddy
 gateway=$(compose port caddy 8080)
 curl --retry 10 --retry-delay 2 --retry-connrefused --max-time 5 -fsS "http://$gateway/health"
