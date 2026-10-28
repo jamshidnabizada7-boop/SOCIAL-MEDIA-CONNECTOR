@@ -2,7 +2,39 @@
 
 The full project is in [GitHub master](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR) and live on Oracle at [app.myariahub.com](https://app.myariahub.com). The deployed application revision is `df68e34577878b09df0f313562fff5c630054826`; later documentation and GitHub monitor-schedule changes do not change application code. PR #1 is merged. Production secrets, databases, uploaded media and recovery material remain private runtime state.
 
-## Current evidence
+## Universal Feed development (not deployed)
+
+Branch `codex/universal-feed` adds `/feed`, seven categories, a stable mixed-content
+API, personal bookmarks/follows/preferences, source controls, official players,
+immersive video browsing and labelled isolated demo mode. Migration `0009` adds
+eight tables (49 in the new source; production remains at 41). No production
+database, OAuth settings or native posts were changed by this feature task.
+
+Real public Bluesky discovery and YouTube URL oEmbed returned HTTP 200 in read-only
+probes. mastodon.social rejected unauthenticated public timeline access with 422;
+the app reports this and supports authorized instance sources. Other adapters are
+fixture-verified capabilities, not new claims of live provider approval. TikTok
+connection/publishing remains disabled; X/LinkedIn/Pinterest are link references.
+
+Verification covers user/workspace boundaries, source/credential isolation, mixing,
+duplicate native posts, cursor/session limits, saves/follows/hides, rate-limit
+backoff, cache expiry and minimal saved-reference retention. Seven API browser
+cases and both demo cases passed, including existing publishing and Inbox flows.
+The 1,000-post load test recorded zero duplicates, operations tests passed 25/25,
+monitor tests passed 4/4, and production dependency audit found zero vulnerabilities.
+The complete local suite passed 232 tests, backend/shared/web type checks and
+package/API/worker/web builds passed, and lint has zero errors with the same 48
+pre-existing warnings. Linux container/migration/backup/restore CI remains a
+separate release check; Docker is unavailable on this Windows executor.
+See [actual capabilities and setup](UNIVERSAL-FEED.md).
+
+## Deployed release evidence
+
+The [29 October Feed readiness audit](FEED-PRODUCTION-VERIFICATION-2026-10-29.md)
+adds real native-player verification, concurrent source-cap enforcement, preference
+cleanup on removal, strict Bluesky moderation and a repeatable cached-feed load
+check. This candidate still requires separate deployment; production remains on
+the earlier revision above. Current test and CI evidence is attached to PR #2.
 
 - API/worker/web/PostgreSQL/Caddy healthy; named tunnel and nightly backup timer active.
 - Unified Social Inbox deployed; mobile navigation scroll/dismiss/focus fix passes browser checks.

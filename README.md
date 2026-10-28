@@ -14,6 +14,12 @@ uploader requires the Windows computer and Codex to be available.
 See [the current handoff](docs/PROJECT-STATUS.md) and
 [the readiness plan](docs/PRODUCTION-READINESS-PLAN.md).
 
+**New development — Universal Feed:** `/feed` adds mixed public/authorized discovery,
+personal saves and follows, source preferences and official video players. This
+feature includes migration `0009` and is **not deployed on Oracle**. See
+[capabilities, setup and verification](docs/UNIVERSAL-FEED.md); native platform
+permissions still determine what content is available.
+
 **Live update — 28 October:** Unified Social Inbox and the mobile navigation
 repair are deployed on Oracle at [the Inbox](https://app.myariahub.com/inbox),
 in the current release. See the
@@ -27,7 +33,7 @@ provider coverage, migration, deployment checks and remaining permission require
 | `apps/web` | Next.js 16 UI; API mode for real data, mock mode for demos |
 | `apps/api` | Fastify 5: sessions, workspaces, permissions, accounts, posts, media, billing, admin |
 | `apps/worker` | Durable job claims/leases, real adapters, reconciliation, token refresh, maintenance and alerts |
-| `packages/db` | Drizzle schema (41 tables), migrations, seeds and encrypted credential vault |
+| `packages/db` | Drizzle schema (49 tables in this source, 41 in the deployed release), migrations, seeds and encrypted credential vault |
 | `packages/providers-core` | OAuth, provider HTTP clients, token refresh and supported analytics ingestion |
 | `packages/media-core` | File inspection and shared local-disk storage |
 | `packages/shared-types` | Contracts, provider capabilities, scheduling and telemetry sanitization |
@@ -115,7 +121,9 @@ npm test
 npm run test:ops
 npx playwright install chromium
 npm run test:e2e
+npm run test:e2e:demo
 npm run test:load
+npm run test:feed-load
 npm audit --omit=dev
 npm run build
 ```

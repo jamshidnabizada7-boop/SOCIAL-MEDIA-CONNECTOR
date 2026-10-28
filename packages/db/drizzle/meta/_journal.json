@@ -64,6 +64,13 @@
       "when": 1793165338262,
       "tag": "0008_rare_dragon_lord",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793198862278,
+      "tag": "0009_careful_red_wolf",
+      "breakpoints": true
     }
   ]
 }

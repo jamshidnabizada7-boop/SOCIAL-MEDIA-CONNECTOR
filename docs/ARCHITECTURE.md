@@ -1,8 +1,9 @@
 # Aria Hub architecture
 
 The product has a Next.js web app, Fastify HTTP API, and publishing worker. The
-current source has 41 Drizzle tables and nine real publishing adapters.
-TikTok is disabled. Production uses Node 24/22, Postgres 16, shared media storage,
+current source has 49 Drizzle tables and nine real publishing adapters. The deployed
+release still has 41 tables; Universal Feed migration `0009` has not been deployed.
+TikTok publishing is disabled. Production uses Node 24/22, Postgres 16, shared media storage,
 Caddy and an optional named Cloudflare Tunnel.
 
 ## Data path
@@ -69,6 +70,19 @@ Replies require a provider confirmation ID; ambiguous delivery becomes unknown
 and cannot be blindly retried. Operational notifications remain on their existing
 service. Release `60aaa87` is deployed on Oracle. One Facebook Page has passed
 live read/sync verification; other provider acceptance requirements remain in the report.
+
+## Universal Feed (source only; not deployed)
+
+`/feed` reads a personal metadata pool through the workspace-authenticated Feed API.
+Eight additive tables hold sources, cached references, preferences, follows, saves,
+hidden/report signals, leases and frozen browsing-session ID order. Account sources
+also enforce active membership and a composite account/workspace foreign key.
+The worker runs bounded read cycles independently of publishing and Inbox; scroll
+requests read the cache. A weighted seeded mixer deduplicates and interleaves real
+available sources. Official players load only for the active visible item; videos
+are not downloaded or rehosted. Demo mode is explicitly labelled and isolated.
+See [Universal Feed](UNIVERSAL-FEED.md) for actual provider coverage, local setup,
+cache/deletion limits, privacy and verification evidence.
 
 ## Security and operations
 
