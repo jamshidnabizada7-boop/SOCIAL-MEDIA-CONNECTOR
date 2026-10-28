@@ -9,8 +9,10 @@ locally checked, not approved by a social platform or deployed to production.
 - [x] Workspace-scoped Inbox UI/API, independent handling states, team assignments, bulk actions and user category preferences.
 - [x] Durable sync/reply work in the existing worker, five real provider integrations and signed Meta webhook wakeups; bounded history and unsupported capabilities documented.
 - [x] Fix the stuck mobile navigation overlay, scrolling and keyboard dismissal/focus behavior.
-- [ ] Validate new Inbox migrations in isolated PostgreSQL staging and perform owned-account live provider acceptance with required grants/app approvals.
-- [ ] Deploy the reviewed Inbox branch when explicitly requested; Oracle remains on its existing revision.
+- [x] Validate fresh Inbox migrations and backup/restore through the isolated PostgreSQL container CI checks.
+- [x] Deploy Inbox release `60aaa87` to Oracle on explicit instruction, after a verified backup; check public pages/assets, credentials and service health.
+- [x] Verify existing Facebook grants and live read synchronization for one Page without sending any replies.
+- [ ] Complete remaining live provider acceptance: Instagram comment permission, older Facebook reconnection and other networks' required grants/app approvals.
 
 See [SOCIAL-INBOX.md](SOCIAL-INBOX.md) for exact coverage and executed checks.
 

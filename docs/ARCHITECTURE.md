@@ -67,7 +67,8 @@ Signed Meta webhooks durably wake account polling after signature verification
 and deduplication; raw payloads are discarded. API/browser reads use stored data.
 Replies require a provider confirmation ID; ambiguous delivery becomes unknown
 and cannot be blindly retried. Operational notifications remain on their existing
-service. This new source is awaiting deployment and live provider acceptance.
+service. Release `60aaa87` is deployed on Oracle. One Facebook Page has passed
+live read/sync verification; other provider acceptance requirements remain in the report.
 
 ## Security and operations
 

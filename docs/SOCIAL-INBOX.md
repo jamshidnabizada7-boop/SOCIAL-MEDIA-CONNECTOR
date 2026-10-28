@@ -1,9 +1,10 @@
 # Social Inbox implementation and verification
 
 This branch adds `/inbox` alongside the existing operational `/notifications`.
-The Oracle installation and provider apps were not modified. All verification
-uses isolated local databases, synthetic tokens, injected HTTP responses or the
-local Bluesky fixture. No real posts, replies, mail or billing actions were sent.
+Initial implementation verification used isolated local databases, synthetic
+tokens, injected HTTP responses and the local Bluesky fixture. The user then
+explicitly requested an Oracle deployment, recorded below. No live provider apps
+were changed and no real posts, replies, mail or billing actions were sent.
 
 ## User flows and permissions
 
@@ -99,7 +100,8 @@ or publishing tables are repurposed:
 foreign key for inbox ownership. The referenced uniqueness is created before the
 foreign key. Account deletion cascades inbox content/actions/context. Fresh
 migrations and composite cross-workspace rejection are tested against PGlite.
-There are now 41 application tables. No production migration was executed.
+There are now 41 application tables. The production application of these migrations
+is recorded in the deployment section below.
 
 ## Backend endpoints
 
@@ -236,8 +238,7 @@ Executed on 28 October 2026, final source checks:
 
 Local screenshots inspected include desktop Inbox, the mobile Inbox, and a mobile
 demo conversation with a confirmed local reply. CI now includes the separate demo
-browser check. Docker/staging PostgreSQL and live provider acceptance were not run
-for this new feature and are not claimed as passed.
+browser check. The subsequent container CI and production checks are recorded below.
 
 Before production rollout: review the code/migrations, back up and validate the
 new migrations in an isolated PostgreSQL staging stack, grant/test required
@@ -245,5 +246,44 @@ provider scopes and review approvals, configure/verify Meta subscriptions if
 desired, and conduct live owned-account acceptance without assuming every
 provider feature is available. Five providers have code integrations, not blanket
 production approval. The remaining five inbox integrations are explicitly not
-implemented. Deployment requires a separate instruction; this work does not
-deploy or mutate the existing Oracle installation.
+implemented. Production deployment was subsequently requested and performed as follows.
+
+## Oracle deployment — 28 October 2026
+
+On the user's explicit "MAKE IT LIVE ON ORACLE" instruction, deployed
+`60aaa87fe70175a3f77e377aeefdd0050343b336` to `/opt/ariahub-v2` using the committed
+deployment script with the existing external systemd tunnel. Exact source is
+tagged `oracle-inbox-60aaa87`; documentation commits may be newer than that release.
+
+- Both application and isolated container/migration/backup-restore CI checks
+  passed for this exact revision.
+- Kept previous application/web image tags `pre-inbox-b831ae2`, release source
+  archives and `PREVIOUS_REVISION=b831ae23c4d448f5434e77616c1e644fcecc198e`.
+- Took quiesced backup `backup-20261028T055847Z`; both database and media manifest
+  checksums passed before migration. Existing writers were restarted after backup.
+- Built production ARM64 images, applied migrations 0007/0008 and completed the
+  deployment health checks. Database now has 41 public application tables and nine
+  recorded migrations. API, worker, web and PostgreSQL are healthy; the existing
+  tunnel and backup timer remain active. The separate older installation was not changed.
+- Public `/inbox` and both public API health URLs return HTTP 200; health confirms
+  PostgreSQL connectivity. All 15 referenced Inbox script assets loaded, including
+  the Inbox and corrected mobile-navigation bundles. Unauthenticated Inbox API
+  access correctly returns 401.
+- All four existing account credentials and the stored Meta app secret still
+  decrypt. Secrets were not rotated or emitted in verification output.
+- Existing Meta grants were checked server-side against Meta token metadata and
+  the configured app identity. Only provider-verified existing scopes were cached
+  in the account/vault records, with an audit event; no new permissions were requested.
+  One Facebook Page has all required grants and its worker sync is healthy. The
+  current bounded window returned no Inbox items. One older Facebook token could
+  not be verified (Meta HTTP 400/code 100) and remains gated for reconnection.
+  Both Instagram connections lack `instagram_manage_comments`; use the live
+  "Review inbox permissions" flow after the required Meta permission is available.
+- No live reply was submitted; the production outgoing Inbox ledger is empty.
+  Reply dispatch and mobile interactions retain the local/browser fixture evidence
+  above. Browser-control tooling was unavailable for signed-in live UI automation,
+  so public page/assets, connected-account storage and health were checked directly.
+- Cleared unused build cache before/after building, preserving data volumes,
+  backups and rollback images. Approximately 3.3 GiB remained free afterwards.
+
+Live page: [app.myariahub.com/inbox](https://app.myariahub.com/inbox).

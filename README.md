@@ -11,11 +11,11 @@ legal operator details and real-platform approvals/testing still need setup.
 See [the current handoff](docs/PROJECT-STATUS.md) and
 [the readiness plan](docs/PRODUCTION-READINESS-PLAN.md).
 
-**New work awaiting deployment:** Unified Social Inbox and mobile navigation
-repair are implemented on `codex/social-inbox`. See the
+**Live update — 28 October:** Unified Social Inbox and the mobile navigation
+repair are deployed on Oracle at [the Inbox](https://app.myariahub.com/inbox),
+release `60aaa87`. See the
 [Inbox implementation and verification report](docs/SOCIAL-INBOX.md) for exact
-provider coverage, migration and setup requirements. This feature has not changed
-the Oracle deployment.
+provider coverage, migration, deployment checks and remaining permission requirements.
 
 ## Repository
 
@@ -38,10 +38,12 @@ at `/opt/ariahub-v2` on Oracle: the frontend, API, worker, provider clients,
 database schema and migrations, shared packages, tests, Docker files and
 deployment/recovery tooling. Its full development history is included.
 
-The exact Oracle application revision is
+The previous Oracle application revision is
 [`oracle-b831ae2`](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/tree/oracle-b831ae2).
-A SHA-256 comparison verified all 272 files in that revision against the Oracle
-installation. The `master` branch also includes newer handoff documentation.
+A SHA-256 comparison verified all 272 files in that earlier revision against the Oracle
+installation. The current Inbox release is
+[`oracle-inbox-60aaa87`](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/tree/oracle-inbox-60aaa87).
+The Inbox branch also includes newer deployment documentation.
 
 [Download the complete Oracle source as a ZIP](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/archive/refs/tags/oracle-b831ae2.zip).
 

@@ -1,9 +1,14 @@
 # Project handoff — 27 October 2026
 
 **28 October source update:** `codex/social-inbox` adds the Unified Social Inbox
-and repairs stuck mobile navigation. It has not been deployed. The installation
-status below still describes Oracle. See [SOCIAL-INBOX.md](SOCIAL-INBOX.md) for
-the new migrations, provider limits, verification evidence and rollout requirements.
+and repairs stuck mobile navigation. Release `60aaa87fe70175a3f77e377aeefdd0050343b336`
+was deployed to Oracle on the user's explicit instruction. API/worker/web are
+healthy; migrations 0007/0008 applied, public Inbox/assets passed checks, and all
+four account credentials plus the Meta app secret still decrypt. A fresh verified
+backup and previous images were retained. One Facebook Page now synchronizes
+successfully after verifying its existing grants; Instagram needs
+`instagram_manage_comments`, and an older Facebook grant could not be verified.
+See [SOCIAL-INBOX.md](SOCIAL-INBOX.md) for the full deployment record and provider limits.
 
 **The application is deployed on Oracle at https://app.myariahub.com.
 Container, restore, public health and browser checks pass. Email, offsite backup,
