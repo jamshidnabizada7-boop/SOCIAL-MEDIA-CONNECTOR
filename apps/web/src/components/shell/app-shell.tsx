@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bell,
   CheckCheck,
@@ -339,11 +339,49 @@ function Topbar({ onOpenPalette, onOpenMobileNav }: { onOpenPalette: () => void;
 function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { session, signOut } = useSession();
   const router = useRouter();
-  if (!session) return null;
+  const pathname = usePathname();
+  const panel = useRef<HTMLDivElement>(null);
+  const openedPath = useRef(pathname);
+
+  useEffect(() => {
+    if (!open) return;
+    if (openedPath.current !== pathname) onClose();
+  }, [open, pathname, onClose]);
+
+  useEffect(() => {
+    if (!open) { openedPath.current = pathname; return; }
+    openedPath.current = pathname;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    panel.current?.querySelector<HTMLElement>('button, a[href]')?.focus();
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const onResize = () => { if (desktop.matches) onClose(); };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); onClose(); }
+      if (event.key !== "Tab") return;
+      const controls = Array.from(panel.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), [tabindex="0"]') ?? []).filter(el => el.getClientRects().length > 0);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    desktop.addEventListener("change", onResize);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKey);
+      desktop.removeEventListener("change", onResize);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+    // Path changes are handled by the separate navigation effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, onClose]);
+
+  if (!session || !open) return null;
   return (
     <div className="fixed inset-0 z-[80] lg:hidden">
       <div className="absolute inset-0 bg-ink/40 backdrop-blur-[2px] dark:bg-black/60" onClick={onClose} aria-hidden />
-      <div className="pop-in absolute inset-y-0 left-0 flex w-72 flex-col border-r bg-surface shadow-pop">
+      <div ref={panel} role="dialog" aria-modal="true" aria-label="Mobile navigation" className="pop-in absolute inset-y-0 left-0 flex w-72 max-w-[calc(100vw-2rem)] flex-col border-r bg-surface shadow-pop">
         <div className="flex h-14 items-center justify-between border-b px-4">
           <Logo />
           <button onClick={onClose} aria-label="Close navigation" className="rounded-lg p-2 text-ink-3 hover:bg-surface-2">
@@ -385,6 +423,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const closeMobileNav = useCallback(() => setMobileNav(false), []);
   const toast = useToast();
 
   useEffect(() => {
@@ -468,7 +507,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ))}
       </nav>
 
-      <MobileNavDrawer open={mobileNav} onClose={() => setMobileNav(false)} />
+      <MobileNavDrawer open={mobileNav} onClose={closeMobileNav} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
