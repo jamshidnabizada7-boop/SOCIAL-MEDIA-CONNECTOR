@@ -1,4 +1,11 @@
 :8080 {
+	# Public access uses HTTPS through the named tunnel. Cover web pages and
+	# assets as well as the API's own security headers.
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	# Cloudflare sets this to the visitor's scheme, even though the tunnel
+	# connects to this private listener over HTTP. Direct health probes omit it.
+	@insecure header X-Forwarded-Proto http
+	redir @insecure https://{host}{uri} permanent
 	# Same-origin product: one public host serves UI and API, so the
 	# SameSite=Lax session cookie stays first-party.
 	handle /v1/* {

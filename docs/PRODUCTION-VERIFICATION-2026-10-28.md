@@ -12,6 +12,7 @@ Aria Hub is live on Oracle. This audit verifies specific boundaries; it does not
 - API/proxy failures return a readable error instead of exposing a JSON parse failure or development-server instructions.
 - Confirmation-email resend returns an error when the mail transport fails. Configured support replies use `MAIL_REPLY_TO`.
 - The privacy page describes the Inbox data collected and its configured retention limits.
+- Public gateway checks found HTTP pages served without redirect and no web-page HSTS. Caddy now redirects Cloudflare's HTTP visitors to HTTPS and supplies HSTS for web/API/assets. Deployment explicitly reloads bind-mounted Caddy configuration; a failed reload cannot advance the verified revision.
 
 ## Executed local checks
 
@@ -20,7 +21,7 @@ Aria Hub is live on Oracle. This audit verifies specific boundaries; it does not
 | Application tests | 187 passing cases across API, worker, web, providers and media. The full suite ran before the final resend fix; the complete 24-case security file was rerun after that fix. |
 | Browser, API mode | Five passing cases: billing outage/retry without demo values, mobile drawer scrolling/dismissal/focus, Inbox sync/reply using HTTP fixtures, Inbox API failure, and publishing using an HTTP fixture. |
 | Browser, demo mode | One passing case; separate persisted demo interactions and no API requests. |
-| Operations | 24 passing deployment/backup/restore regressions. |
+| Operations | 25 passing deployment/backup/restore regressions, including gateway reload failure. |
 | Production dependencies | `npm audit --omit=dev`: zero reported vulnerabilities. |
 | Compile/lint | Backend typecheck and API/worker builds passed; browser harness built standalone Next.js successfully. Lint has zero errors and 48 existing warnings. |
 
@@ -29,7 +30,8 @@ These browser/provider checks use isolated databases and fixture HTTP servers. T
 ## Live environment and recovery
 
 - API, worker, web and PostgreSQL containers are healthy. Caddy, the existing named tunnel and nightly local backup timer are running. The independent older Aria Hub deployment was preserved.
-- One Facebook Page has provider-verified Inbox grants and healthy live read synchronization. One older Facebook token lacks verified grants. Both Instagram connections require `instagram_manage_comments` before comment synchronization/reply can work.
+- One Facebook Page has provider-verified Inbox grants and healthy live read synchronization. A direct authenticated read matched its identity and returned ten owned posts. Both Instagram identities also matched a live authenticated read; both require `instagram_manage_comments` before comment synchronization/reply can work.
+- The older Facebook token was rejected by Meta with HTTP 401 / code 190 / subcode 460 while its stored connection still said healthy. Rechecked the unchanged encrypted credential under a database lock, changed the connection to `needs_reauth`, and recorded an in-app notification and audit event. No credential or permission was replaced.
 - No live publishing deliveries or outgoing Inbox replies were present during this audit. No acceptance post or reply was sent.
 - Found the existing Aria Hub Oracle SMTP configuration under `/etc/aria-hub/account-email.env`. Verified certificate validation, STARTTLS, SMTP authentication and NOOP; then configured this application using that service. Nodemailer's `verify()` also succeeded inside the production API container. No acceptance email was sent; inbox receipt/deliverability is unverified.
 - Sender: `accounts@myariahub.com`; support reply/contact: `info@myariahub.com`. The contact is also published on the [existing Aria Hub press page](https://www.myariahub.com/en/press).
