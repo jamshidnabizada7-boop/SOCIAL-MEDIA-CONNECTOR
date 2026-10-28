@@ -23,6 +23,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:ops
+      - run: python3 -m unittest discover -s scripts -p '*_test.py'
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run build:api && npm run build:worker
       - run: npx playwright install --with-deps chromium

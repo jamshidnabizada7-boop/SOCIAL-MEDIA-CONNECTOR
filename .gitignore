@@ -53,6 +53,7 @@ apps/worker/.test-data/
 test-results/
 playwright-report/
 **/tmp/
+__pycache__/
 
 # Production backups (on the server)
 backups/
