@@ -30,7 +30,7 @@ Acceptance references:
 - Facebook Inbox reply: `122203523090789569_1142670958293051`. Its confirmed receipt remains in production. Later native/API reads show the temporary root post unavailable; this audit did not confirm who removed it.
 - Instagram post: `3b70c2f7-ee61-4ad7-9132-28bbfc14abf2`; media `18108527570189125`; [native permalink](https://www.instagram.com/p/DfCi5xslSZ0/).
 - Instagram test comment `17883269511534384`, reply `18145366855607511`; native reply text matched.
-- Instagram test cleanup: Graph deletion was refused (code 10). Business Suite's exact permanent-deletion dialog is prepared; awaiting the user's confirmation. Published delivery receipts are preserved.
+- Instagram test cleanup: after explicit user approval, deleted only media `18108527570189125` through Meta Business Suite. Meta displayed “Your post has been deleted”; a subsequent authenticated Graph read confirmed the media is unavailable. Cleanup is audited, and published delivery receipts remain preserved. The earlier API deletion attempt was refused (code 10), so it was not blindly retried.
 - Screenshots are saved locally under ignored `test-results/`: `live-facebook-published.png`, `live-inbox-reply-confirmed.png`, `live-instagram-published.png`, `instagram-permissions-saved.png` and `live-threads-published.png`.
 
 Threads uses `https://api.myariahub.com/v1/oauth/callback/threads`. Publishing the developer app does not prove that every requested permission has advanced access. Threads/LinkedIn/X/Pinterest/TikTok Inbox integrations are not implemented; TikTok publishing remains disabled. LinkedIn, YouTube, X and Pinterest developer credentials/approvals remain unavailable.

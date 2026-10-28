@@ -8,6 +8,7 @@ The full project is in [GitHub master](https://github.com/jamshidnabizada7-boop/
 - Unified Social Inbox deployed; mobile navigation scroll/dismiss/focus fix passes browser checks.
 - Facebook published through composer/worker and replied through the live Inbox on the first attempt; Meta confirmed the reply text.
 - Instagram publishing on @aria___hub passed on the first attempt. A real adapter comment/reply readback also passed. Both connected Instagram accounts now have verified comment-management grants and healthy synchronization.
+- Deleted only the temporary Instagram acceptance post after explicit approval. Meta UI and authenticated readback confirm removal; delivery receipts and the cleanup audit remain preserved.
 - Threads developer app published, credentials encrypted on Oracle and callback saved. Account login/connection and live delivery remain incomplete.
 - Existing SMTP configured; approved test email and external monitor test alert accepted. Inbox receipt is unconfirmed.
 - Both missing media originals recovered by exact stored checksums. Encrypted private Drive backups downloaded, hash-verified and restored into isolated PostgreSQL.
@@ -36,7 +37,6 @@ Important hardening includes shared Postgres rate limits, private-address/SSRF p
 - Public Meta/other-platform approvals and independent legal/security review remain external gates. Unconfigured providers and unsupported Inbox integrations are not launch-ready.
 - Confirm actual mailbox receipt and real account-email flows. Stripe stays disabled unless legitimately configured for paid plans.
 - Verify unattended cloud-copy and scheduled public-monitor runs; retain another protected recovery-key copy. The current uploader cannot run while this computer/Codex is unavailable.
-- Complete the Instagram test-post cleanup after the pending permanent-deletion approval; preserve delivery evidence.
 - Grow Oracle disk capacity before sustained usage and conduct a monitored soft launch.
 
 ## Continuing development

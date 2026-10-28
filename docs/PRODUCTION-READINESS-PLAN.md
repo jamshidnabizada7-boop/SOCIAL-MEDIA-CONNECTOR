@@ -28,7 +28,7 @@ Updated 28 October 2026. Checked items below have the specific evidence in the [
 - [ ] Sign in and connect intended Threads profile; honor channel quota and verify real delivery.
 - [ ] Reconnect the older workspace's Facebook credential if that workspace will be used.
 - [ ] Verify full incoming Instagram comment → Inbox UI → outgoing worker reply flow; Little Moments outgoing acceptance remains untested.
-- [ ] Clean up Instagram acceptance post after permanent-deletion confirmation.
+- [x] Delete only the Instagram acceptance post after explicit approval; verify Meta confirmation and native unavailability, preserve/audit the delivery receipts.
 
 ## Provider public access
 
