@@ -183,6 +183,15 @@ it never contacts provider APIs or loads real players. API mode has no demo fall
 
 ## Verification
 
+The follow-up [production-readiness audit](FEED-PRODUCTION-VERIFICATION-2026-10-29.md)
+records real YouTube/Bluesky playback, feed-specific load results and additional
+source/moderation hardening. Bluesky's official embed contains the complete post;
+long captions can require scrolling within that embed to reach its video controls.
+The UI explains this. Restrictive global moderation labels and age-restricted
+Bluesky labels are excluded from these public display paths, including when
+"Include content marked sensitive" is enabled. Public link-only references do not
+offer a creator follow without verified creator metadata.
+
 The automated story covers browser → authenticated API → isolated database →
 worker → local official-response fixtures → normalized response → mixed feed.
 Automated tests do not publish real social posts or call paid provider APIs.
@@ -195,7 +204,7 @@ Automated tests do not publish real social posts or call paid provider APIs.
 | Normalized response → UI | Mixed provider cards, filter results, duplicate-free continuation and saved state after reload |
 | Players | Exact official URL and one-player teardown tested with fixture iframe content; real playback remains a separate release check |
 
-Local acceptance: 232 application tests, seven API browser cases, two demo browser
+Initial acceptance (`7313891`): 232 application tests, seven API browser cases, two demo browser
 cases, 25 operations tests and four monitor tests passed. Package/API/worker/web
 builds and type checks passed; lint has zero errors and 48 existing warnings.
 The 1,000-post isolated load test found zero duplicates; production dependency audit

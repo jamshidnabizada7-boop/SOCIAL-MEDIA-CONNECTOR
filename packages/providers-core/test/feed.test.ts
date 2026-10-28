@@ -45,6 +45,62 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 describe("real feed adapters and safe metadata", () => {
+  it.each([
+    "!hide",
+    "!warn",
+    "!no-unauthenticated",
+    "porn",
+    "sexual",
+    "graphic-media",
+  ])(
+    "never exposes restricted Bluesky label %s through public display paths",
+    async (label) => {
+      const result = await retrieveFeed({
+        provider: "bluesky",
+        kind: "public",
+        config: validateFeedSource("bluesky", "public", {}),
+        fetchImpl: async () =>
+          json({ feed: [{ post: { ...post(), labels: [{ val: label }] } }] }),
+      });
+      expect(result).toEqual([]);
+    },
+  );
+  it("honors author/self labels, ignores negated labels and keeps nudity behind the explicit sensitive preference", async () => {
+    const rows = [
+      { ...post(1), author: { ...post().author, labels: [{ val: "!hide" }] } },
+      {
+        ...post(2),
+        record: { ...post().record, labels: { values: [{ val: "porn" }] } },
+      },
+      { ...post(3), labels: [{ val: "!hide", neg: true }] },
+      { ...post(4), labels: [{ val: "nudity" }] },
+      { ...post(5), labels: [{ val: "!hide", exp: "invalid" }] },
+    ];
+    const result = await retrieveFeed({
+      provider: "bluesky",
+      kind: "public",
+      config: validateFeedSource("bluesky", "public", {}),
+      fetchImpl: async () => json({ feed: rows.map((post) => ({ post })) }),
+    });
+    expect(result.map((item) => item.providerPostId.split("/").at(-1))).toEqual(
+      ["key3", "key4"],
+    );
+    expect(result[1].sensitive).toBe(true);
+    expect(
+      mixFeed(
+        result.map((item, i) => ({
+          ...item,
+          id: String(i),
+          sourceId: "source",
+          sourceType: "public",
+          topics: [],
+        })),
+        "s",
+        DEFAULT_FEED_PREFERENCES,
+        Date.now(),
+      ),
+    ).toHaveLength(1);
+  });
   it("normalizes public Bluesky data, preserves unavailable metrics and uses the official embed route", async () => {
     const call = vi.fn(async (_url: string, init?: RequestInit) => {
       expect(new Headers(init?.headers).has("authorization")).toBe(false);

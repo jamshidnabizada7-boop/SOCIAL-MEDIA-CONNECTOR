@@ -118,6 +118,12 @@ test("mobile Feed navigation, official single-player lifecycle, video arrows and
     .first()
     .click();
   await expect(page.locator("iframe")).toHaveCount(1);
+  await expect(
+    page.getByText(
+      "Bluesky shows the full post. Scroll inside it to reach video controls.",
+      { exact: true },
+    ),
+  ).toBeVisible();
   await expect(page.locator("iframe")).toHaveAttribute(
     "src",
     /https:\/\/embed\.bsky\.app\/embed\/did:/,

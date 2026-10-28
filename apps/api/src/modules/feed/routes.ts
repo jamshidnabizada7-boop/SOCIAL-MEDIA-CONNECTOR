@@ -12,6 +12,7 @@ import {
   feedSources,
   feedSyncState,
   socialAccounts,
+  users,
 } from "@aria/db";
 import {
   DEFAULT_FEED_PREFERENCES,
@@ -221,61 +222,87 @@ export function registerFeedRoutes(app: FastifyInstance): void {
           "Use a publicly reachable HTTPS instance.",
         );
       }
-    if (
-      (
-        await db
-          .select({ id: feedSources.id })
-          .from(feedSources)
-          .where(eq(feedSources.userId, userId))
-          .limit(31)
-      ).length >= 30
-    )
-      throw fail(
-        409,
-        "source_limit",
-        "You can keep up to 30 feed sources. Remove an unused source before adding more.",
-      );
-    const [source] = await db
-      .insert(feedSources)
-      .values({
-        userId,
-        workspaceId: account ? ws : null,
-        accountId: account?.id || null,
-        provider: input.provider,
-        kind: input.kind,
-        label: input.label,
-        sourceKey: key,
-        config,
-        topics: [...new Set(input.topics)],
-      })
-      .onConflictDoNothing()
-      .returning();
-    const result =
-      source ||
-      (
-        await db
-          .select()
-          .from(feedSources)
-          .where(
-            and(eq(feedSources.userId, userId), eq(feedSources.sourceKey, key)),
-          )
-      )[0];
-    await db
-      .insert(feedSyncState)
-      .values({ sourceId: result.id })
-      .onConflictDoNothing();
-    return result;
+    return db.transaction(async (tx) => {
+      // Serialize subscriptions for this profile across API replicas so the
+      // source cap also holds when several requests arrive together.
+      await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, userId))
+        .for("update");
+      const [concurrent] = await tx
+        .select()
+        .from(feedSources)
+        .where(
+          and(eq(feedSources.userId, userId), eq(feedSources.sourceKey, key)),
+        );
+      if (concurrent) return concurrent;
+      if (
+        (
+          await tx
+            .select({ id: feedSources.id })
+            .from(feedSources)
+            .where(eq(feedSources.userId, userId))
+            .limit(31)
+        ).length >= 30
+      )
+        throw fail(
+          409,
+          "source_limit",
+          "You can keep up to 30 feed sources. Remove an unused source before adding more.",
+        );
+      const [source] = await tx
+        .insert(feedSources)
+        .values({
+          userId,
+          workspaceId: account ? ws : null,
+          accountId: account?.id || null,
+          provider: input.provider,
+          kind: input.kind,
+          label: input.label,
+          sourceKey: key,
+          config,
+          topics: [...new Set(input.topics)],
+        })
+        .onConflictDoNothing()
+        .returning();
+      const result =
+        source ||
+        (
+          await tx
+            .select()
+            .from(feedSources)
+            .where(
+              and(
+                eq(feedSources.userId, userId),
+                eq(feedSources.sourceKey, key),
+              ),
+            )
+        )[0];
+      await tx
+        .insert(feedSyncState)
+        .values({ sourceId: result.id })
+        .onConflictDoNothing();
+      return result;
+    });
   }
   async function bootstrap(userId: string, ws: string): Promise<void> {
+    const subscribe = async (input: z.infer<typeof sourceInput>) => {
+      try {
+        await addSource(userId, ws, input);
+      } catch (error) {
+        if ((error as { code?: string }).code !== "source_limit") throw error;
+      }
+    };
     if (process.env.ARIA_FEED_DEFAULTS !== "false") {
-      await addSource(userId, ws, {
+      await subscribe({
         provider: "bluesky",
         kind: "public",
         label: "Bluesky public discovery",
         config: {},
         topics: [],
       });
-      await addSource(userId, ws, {
+      await subscribe({
         provider: "mastodon",
         kind: "public",
         label: "mastodon.social public timeline",
@@ -471,11 +498,35 @@ export function registerFeedRoutes(app: FastifyInstance): void {
         "managed_source",
         "Pause this default or connected-account source instead.",
       );
-    await db
-      .delete(feedSources)
-      .where(
-        and(eq(feedSources.id, id), sourceScope(req.user!.id, p.workspaceId)),
-      );
+    await db.transaction(async (tx) => {
+      // Read and prune the preference references under the same row lock.
+      const [stored] = await tx
+        .select()
+        .from(feedPreferences)
+        .where(eq(feedPreferences.userId, req.user!.id))
+        .for("update");
+      await tx
+        .delete(feedSources)
+        .where(
+          and(eq(feedSources.id, id), sourceScope(req.user!.id, p.workspaceId)),
+        );
+      if (stored)
+        await tx
+          .update(feedPreferences)
+          .set({
+            preferences: {
+              ...stored.preferences,
+              mutedSourceIds: stored.preferences.mutedSourceIds.filter(
+                (sourceId) => sourceId !== id,
+              ),
+              reducedSourceIds: stored.preferences.reducedSourceIds.filter(
+                (sourceId) => sourceId !== id,
+              ),
+            },
+            updatedAt: new Date(),
+          })
+          .where(eq(feedPreferences.userId, req.user!.id));
+    });
     return { ok: true };
   });
   app.post(
@@ -833,6 +884,12 @@ export function registerFeedRoutes(app: FastifyInstance): void {
       ws = params(req).workspaceId,
       { item, source } = await findItem(userId, ws, itemId);
     const content = item.content;
+    if (content.availability === "preview_only")
+      throw fail(
+        409,
+        "creator_unavailable",
+        "This link does not provide a verified creator to follow. Open it on the original platform.",
+      );
     let sourceId: string | null = null;
     if (
       ["bluesky", "mastodon", "youtube"].includes(content.provider) &&

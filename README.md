@@ -123,6 +123,7 @@ npx playwright install chromium
 npm run test:e2e
 npm run test:e2e:demo
 npm run test:load
+npm run test:feed-load
 npm audit --omit=dev
 npm run build
 ```

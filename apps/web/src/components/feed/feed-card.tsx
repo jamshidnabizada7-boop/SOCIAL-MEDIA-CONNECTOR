@@ -121,7 +121,7 @@ export function FeedPlayer({
       {load ? (
         <div
           className={cn(
-            "relative w-full",
+            "relative flex w-full flex-col",
             immersive
               ? "h-full"
               : item.provider === "youtube"
@@ -129,10 +129,16 @@ export function FeedPlayer({
                 : "h-[560px] max-h-[70dvh]",
           )}
         >
+          {item.provider === "bluesky" ? (
+            <p className="shrink-0 border-b bg-surface px-3 py-2 pr-14 text-xs leading-relaxed text-ink-2">
+              Bluesky shows the full post. Scroll inside it to reach video
+              controls.
+            </p>
+          ) : null}
           <iframe
             src={url!.href}
             title={`${provider} player: ${item.authorName}`}
-            className="h-full w-full border-0"
+            className="min-h-0 w-full flex-1 border-0"
             allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
             allowFullScreen
             sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
@@ -449,20 +455,22 @@ export function FeedCard({
             />
             {item.saved ? "Saved" : "Save"}
           </Button>
-          <Button
-            variant="ghost"
-            className="min-h-11"
-            onClick={() => actions.follow(item)}
-            disabled={busy}
-            aria-pressed={!!item.following}
-          >
-            {item.following ? (
-              <Check className="size-4" aria-hidden />
-            ) : (
-              <UserPlus className="size-4" aria-hidden />
-            )}
-            {item.following ? "Following" : "Follow in Aria Hub"}
-          </Button>
+          {item.availability !== "preview_only" || item.following ? (
+            <Button
+              variant="ghost"
+              className="min-h-11"
+              onClick={() => actions.follow(item)}
+              disabled={busy}
+              aria-pressed={!!item.following}
+            >
+              {item.following ? (
+                <Check className="size-4" aria-hidden />
+              ) : (
+                <UserPlus className="size-4" aria-hidden />
+              )}
+              {item.following ? "Following" : "Follow in Aria Hub"}
+            </Button>
+          ) : null}
           {!item.sample ? (
             <>
               <Button

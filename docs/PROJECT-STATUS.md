@@ -30,6 +30,12 @@ See [actual capabilities and setup](UNIVERSAL-FEED.md).
 
 ## Deployed release evidence
 
+The [29 October Feed readiness audit](FEED-PRODUCTION-VERIFICATION-2026-10-29.md)
+adds real native-player verification, concurrent source-cap enforcement, preference
+cleanup on removal, strict Bluesky moderation and a repeatable cached-feed load
+check. This candidate still requires separate deployment; production remains on
+the earlier revision above. Current test and CI evidence is attached to PR #2.
+
 - API/worker/web/PostgreSQL/Caddy healthy; named tunnel and nightly backup timer active.
 - Unified Social Inbox deployed; mobile navigation scroll/dismiss/focus fix passes browser checks.
 - Facebook published through composer/worker and replied through the live Inbox on the first attempt; Meta confirmed the reply text.

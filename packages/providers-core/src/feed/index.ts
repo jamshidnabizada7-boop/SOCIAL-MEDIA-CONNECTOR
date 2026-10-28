@@ -276,6 +276,34 @@ function bskyItem(ctx: FeedContext, p: Obj): RetrievedFeedItem | null {
     record = obj(p.record),
     uri = str(p.uri),
     embed = obj(p.embed);
+  const labels = [
+    ...array(p.labels),
+    ...array(author.labels),
+    ...array(obj(record.labels).values),
+  ]
+    .filter(
+      (label) =>
+        label.neg !== true &&
+        (!Number.isFinite(Date.parse(str(label.exp))) ||
+          Date.parse(str(label.exp)) > Date.now()),
+    )
+    .map((label) => str(label.val));
+  // Global moderation restrictions are not a user's "show sensitive" override.
+  // These public display/embedding paths have no age or native-auth gate.
+  if (
+    labels.some((label) =>
+      [
+        "!hide",
+        "!warn",
+        "!no-unauthenticated",
+        "porn",
+        "sexual",
+        "graphic-media",
+        "gore",
+      ].includes(label),
+    )
+  )
+    return null;
   const item = base(
     ctx,
     uri,
@@ -285,14 +313,7 @@ function bskyItem(ctx: FeedContext, p: Obj): RetrievedFeedItem | null {
   );
   if (!item || !/^at:\/\/did:/.test(uri) || p.notFound || p.blocked)
     return null;
-  if (
-    array(p.labels).some((l) =>
-      ["!hide", "!warn", "porn", "sexual", "nudity", "graphic-media"].includes(
-        str(l.val),
-      ),
-    )
-  )
-    item.sensitive = true;
+  if (labels.includes("nudity")) item.sensitive = true;
   item.caption = str(record.text);
   item.authorHandle = str(author.handle);
   item.authorAvatarUrl = safeFeedUrl(author.avatar);

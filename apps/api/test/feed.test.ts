@@ -16,6 +16,7 @@ import {
   socialAccounts,
   workspaceMembers,
   workspaces,
+  users,
 } from "@aria/db";
 import { DEFAULT_FEED_PREFERENCES, type FeedPage } from "@aria/shared-types";
 import type { FetchLike } from "@aria/providers-core";
@@ -392,10 +393,33 @@ describe("feed authorization, caching and durable personalization", () => {
     });
     expect(added.statusCode).toBe(201);
     const id = added.json().id;
+    await syncFeedSource(app.database.db, id, { fetchImpl: fixture });
+    const [reference] = await app.database.db
+      .select()
+      .from(feedItems)
+      .where(eq(feedItems.sourceId, id));
+    expect(
+      (await mutate("POST", "/following", { itemId: reference.id })).statusCode,
+    ).toBe(409);
+    expect(
+      (
+        await mutate("PUT", "/preferences", {
+          ...DEFAULT_FEED_PREFERENCES,
+          mutedSourceIds: [id],
+          reducedSourceIds: [id],
+        })
+      ).statusCode,
+    ).toBe(200);
     expect(
       (await mutate("DELETE", `/sources/${id}`, {}, otherCookie)).statusCode,
     ).toBe(404);
     expect((await mutate("DELETE", `/sources/${id}`)).statusCode).toBe(200);
+    const afterRemoval = (await get("/preferences")).json();
+    expect(afterRemoval.mutedSourceIds).toEqual([]);
+    expect(afterRemoval.reducedSourceIds).toEqual([]);
+    expect((await mutate("PUT", "/preferences", afterRemoval)).statusCode).toBe(
+      200,
+    );
     expect((await mutate("DELETE", `/sources/${id}`)).statusCode).toBe(404);
     expect((await mutate("DELETE", `/sources/${bskySource}`)).statusCode).toBe(
       409,
@@ -410,6 +434,70 @@ describe("feed authorization, caching and durable personalization", () => {
         and(eq(feedSessions.userId, userId), eq(feedSessions.workspaceId, ws)),
       );
     expect(rows.length).toBeLessThanOrEqual(20);
+  });
+  it("enforces the source cap under concurrent additions and still serves a full profile when defaults are enabled", async () => {
+    const registered = await app.inject({
+      method: "POST",
+      url: "/v1/auth/register",
+      payload: {
+        name: "Source cap test",
+        email: "source-cap@fixture.test",
+        password: "correct-horse-battery",
+      },
+    });
+    expect(registered.statusCode).toBe(201);
+    const id = registered.json().user.id,
+      session = registered.cookies
+        .map((c) => `${c.name}=${c.value}`)
+        .join("; ");
+    await app.database.db.insert(workspaceMembers).values({
+      workspaceId: ws,
+      userId: id,
+      role: "viewer",
+      status: "active",
+    });
+    await app.database.db.insert(feedSources).values(
+      Array.from({ length: 29 }, (_, i) => ({
+        userId: id,
+        provider: "x",
+        kind: "url" as const,
+        label: "Cap fixture",
+        sourceKey: `cap-${i}`,
+        config: { url: `https://x.com/creator/status/${100000 + i}` },
+      })),
+    );
+    const results = await Promise.all(
+      [200001, 200002].map((postId) =>
+        mutate(
+          "POST",
+          "/sources",
+          {
+            provider: "x",
+            kind: "url",
+            label: "Concurrent source",
+            config: { url: `https://x.com/creator/status/${postId}` },
+          },
+          session,
+        ),
+      ),
+    );
+    expect(results.map((r) => r.statusCode).sort()).toEqual([201, 409]);
+    expect(
+      (
+        await app.database.db
+          .select()
+          .from(feedSources)
+          .where(eq(feedSources.userId, id))
+      ).length,
+    ).toBe(30);
+    process.env.ARIA_FEED_DEFAULTS = "true";
+    try {
+      expect((await get("", session)).statusCode).toBe(200);
+      expect((await get("/sources", session)).statusCode).toBe(200);
+    } finally {
+      process.env.ARIA_FEED_DEFAULTS = "false";
+      await app.database.db.delete(users).where(eq(users.id, id));
+    }
   });
   it("returns expired saved content as a safe reference with no player or cached caption", async () => {
     const item = (await get("?view=saved")).json<FeedPage>().items[0];

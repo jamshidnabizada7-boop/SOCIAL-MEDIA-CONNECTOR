@@ -31,6 +31,7 @@ jobs:
       - run: npm run test:e2e
       - run: npm run test:e2e:demo
       - run: npm run test:load
+      - run: npm run test:feed-load
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -38,6 +39,7 @@ jobs:
           path: |
             test-results/
             .local/load-test.json
+            .local/feed-load-test.json
             .local/feed-evidence/
           retention-days: 7
   containers:
