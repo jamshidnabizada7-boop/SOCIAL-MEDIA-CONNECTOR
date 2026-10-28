@@ -10,6 +10,7 @@ import { openDatabase, processPublishJob, processReconcileJob } from "./pipeline
 import { claimJobs, heartbeat, jobOutcome, LEASE_MS, type ClaimedJob } from "./pipeline/jobs.js";
 import { runMaintenance } from "./maintenance.js";
 import { inboxTick, retainInbox } from "./inbox.js";
+import { feedTick, retainFeed } from "./feed.js";
 import { ingestMetrics } from "./metrics.js";
 import { captureError, flushTelemetry } from "./telemetry.js";
 import { createOperationsMonitor, reportOperationsAlert } from "./alerts.js";
@@ -82,6 +83,13 @@ async function main() {
   };
   const inboxTimer = setInterval(runInbox, 5000);
   runInbox();
+  let feedFlight: Promise<void> | undefined;
+  const runFeed = () => {
+    if (stopping || feedFlight) return;
+    feedFlight = feedTick(handle.db).catch(() => logger.warn("feed synchronization failed; cached sources will retry")).finally(() => { feedFlight = undefined; });
+  };
+  const feedTimer = setInterval(runFeed, 15000);
+  runFeed();
 
   // Connection monitor (plan §25/§7): renew tokens a day ahead so a 3 a.m.
   // post never waits on a refresh; flag the ones that can't renew themselves.
@@ -102,6 +110,7 @@ async function main() {
     try {
       const result = await runMaintenance(handle.db);
       await retainInbox(handle.db);
+      await retainFeed(handle.db);
       logger.info(result, "maintenance");
     } catch (err) {
       logger.error({ err }, "maintenance failed");
@@ -150,12 +159,13 @@ async function main() {
     logger.info({ signal, inFlight: inFlight.size }, "shutting down — finishing in-flight jobs");
     clearInterval(monitorTimer);
     clearInterval(inboxTimer);
+    clearInterval(feedTimer);
     clearInterval(maintenanceTimer);
     clearInterval(metricsTimer);
     clearInterval(operationsTimer);
     health.close();
     // Unfinished jobs keep their lease and are recovered by the next worker.
-    await Promise.race([Promise.allSettled([...inFlight.values(), ...(inboxFlight ? [inboxFlight] : [])]), new Promise((r) => setTimeout(r, 25_000))]);
+    await Promise.race([Promise.allSettled([...inFlight.values(), ...(inboxFlight ? [inboxFlight] : []), ...(feedFlight ? [feedFlight] : [])]), new Promise((r) => setTimeout(r, 25_000))]);
     await handle.close();
     await flushTelemetry();
     process.exit(0);

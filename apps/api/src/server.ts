@@ -16,6 +16,7 @@ import { registerAccountRoutes } from "./modules/accounts/routes.js";
 import { registerPostRoutes } from "./modules/posts/routes.js";
 import { registerNotificationRoutes } from "./modules/notifications/routes.js";
 import { registerInboxRoutes } from "./modules/inbox/routes.js";
+import { registerFeedRoutes } from "./modules/feed/routes.js";
 import { registerInboxWebhooks } from "./modules/inbox/webhooks.js";
 import { registerMediaRoutes } from "./modules/media/routes.js";
 import { registerWebhookRoutes } from "./modules/webhooks/routes.js";
@@ -141,6 +142,7 @@ export async function buildServer() {
   registerPostRoutes(app);
   registerNotificationRoutes(app);
   registerInboxRoutes(app);
+  registerFeedRoutes(app);
   await registerInboxWebhooks(app);
   registerMediaRoutes(app);
   registerWebhookRoutes(app);

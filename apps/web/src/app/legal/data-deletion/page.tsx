@@ -20,6 +20,15 @@ export default function DataDeletionPage() {
         reconnection.
       </p>
 
+      <h2>Manage personal Feed data</h2>
+      <p>
+        In <strong>Feed</strong>, unsave bookmarks and unfollow creators from their cards. Use
+        <strong> Sources &amp; preferences</strong> to pause sources, remove optional sources or reset preferences and
+        hidden/report signals. Removing a source also removes its cached posts and associated Aria Hub bookmarks and
+        creator follows. These actions do not delete or change content on the original network. Account deletion
+        removes your personal Feed data; deleting a workspace does not remove unrelated personal public subscriptions.
+      </p>
+
       <h2>Delete a workspace</h2>
       <p>
         Owners can open <strong>Settings → Danger zone → Delete this workspace</strong>. Scheduled posts stop at once;

@@ -7,6 +7,7 @@ import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
 import { createDatabase, runMigrations } from "@aria/db";
+import { feedFixture } from "./feed-fixtures.mts";
 
 mkdirSync(".local", { recursive: true });
 const dataDir = mkdtempSync(path.resolve(".local/e2e-"));
@@ -18,6 +19,7 @@ const env = {
   HOST: "127.0.0.1", PORT: "4180", WORKER_HEALTH_PORT: "4181",
   BLUESKY_INSTANCE: "http://127.0.0.1:4182", ARIA_ALLOW_PRIVATE_INSTANCES: "true",
   ARIA_ADAPTER_MODE: "real", SENTRY_DSN: "", SMTP_URL: "", STRIPE_SECRET_KEY: "",
+  ARIA_FEED_FIXTURE_ORIGIN: "http://127.0.0.1:4182", YOUTUBE_DATA_API_KEY: "fixture-only-key",
 };
 const client = new PGlite(path.join(dataDir, "db"));
 const wire = new PGLiteSocketServer({ db: client, port: 4183, host: "127.0.0.1", maxConnections: 32 });
@@ -39,6 +41,10 @@ const fixture = createServer(async (req, res) => {
   const bytes = Buffer.concat(chunks);
   res.setHeader("content-type", "application/json");
   const send = (value: unknown) => res.end(JSON.stringify(value));
+  if(req.url?.startsWith("/feed-fixture/")){
+    const url=new URL(req.url,"http://127.0.0.1:4182"),parts=url.pathname.split("/");
+    return send(feedFixture(parts[2],"/"+parts.slice(3).join("/"),url.searchParams));
+  }
   switch (req.url?.split("?")[0]) {
     case "/_stats": return send({ records, uploads, inboxReplies: [...inboxReplies.values()] });
     case "/xrpc/app.bsky.notification.listNotifications":

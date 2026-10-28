@@ -21,6 +21,7 @@ export default function PrivacyPage() {
         <li><strong>Connected social accounts</strong> — the account or page id, name, handle, follower count and the access tokens the network issues when you authorize Aria Hub. Tokens are encrypted at rest (AES-256-GCM) and are never shown to anyone.</li>
         <li><strong>Content</strong> — the posts, captions, links, schedules and media you create or upload, and per-network settings.</li>
         <li><strong>Social Inbox</strong> — comments, mentions and replies returned by supported networks for your connected accounts, the sender&apos;s public profile details, conversation links, handling states, team assignments and replies your team chooses to send. Private messages are not currently collected.</li>
+        <li><strong>Universal Feed</strong> — public or authorized post metadata, creator attribution and external media references from the sources you choose, plus your personal Aria Hub bookmarks, creator follows, hidden/unavailable reports and explicit preferences. We do not download or rehost platform videos or collect detailed viewing histories.</li>
         <li><strong>Delivery and performance data</strong> — publish attempts, the network&apos;s post id and link, and engagement counts (for example likes, replies, reposts, views) that the network returns for posts published through Aria Hub.</li>
         <li><strong>Billing data</strong> — for paid plans, your subscription status. Card details are collected and stored by Stripe, never by us.</li>
       </ul>
@@ -31,6 +32,7 @@ export default function PrivacyPage() {
         <li>To keep connections working (refreshing tokens before they expire) and to alert you by in-app notification and, if enabled, email when something needs your attention.</li>
         <li>To show analytics about posts you published through Aria Hub.</li>
         <li>To synchronize supported social interactions into your workspace Inbox and send the replies your team requests, using the additional permissions you choose to grant.</li>
+        <li>To mix accessible content in your personal Feed using explicit interests and source preferences. Aria Hub follows and saves do not change your native social account.</li>
         <li>To secure the service (rate limiting, lockouts, audit logs) and to bill paid plans.</li>
       </ul>
       <p>We do not sell personal data, use it for advertising, or use your content to train machine-learning models.</p>
@@ -43,7 +45,7 @@ export default function PrivacyPage() {
         </a>
         , including the Limited Use requirements. We request permission to upload videos to the YouTube channel you
         connect and to read that channel&apos;s basic information and video statistics, and use it only to publish the
-        videos you schedule and to show their performance to you. Google user data is not transferred to third parties
+        videos you schedule, to show their performance and to display accessible public or authorized videos in your Feed. Google user data is not transferred to third parties
         except as needed to provide this feature, for security, or as required by law, and humans do not read it unless
         you ask us to for support or it is necessary for security or legal reasons.
       </p>
@@ -52,8 +54,16 @@ export default function PrivacyPage() {
       <p>
         We use the permissions you grant each network only to publish the content you create in Aria Hub to the
         accounts and pages you select, to read the basic profile needed to identify them, and to read engagement on
-        posts published through Aria Hub. You can revoke access at any time in Aria Hub (Accounts → Disconnect) or in
+        posts published through Aria Hub, synchronize supported Inbox interactions and retrieve accessible Feed content from the sources you select. You can revoke access at any time in Aria Hub (Accounts → Disconnect) or in
         the network&apos;s own settings.
+      </p>
+
+      <h2>External previews and players</h2>
+      <p>
+        Feed images load directly from external sources. Official video players load when you choose a player, or for
+        the active video if you explicitly enable this in Feed preferences. Loading a preview or player sends a request
+        to its provider, which may process your IP address, browser information and its own cookies under its policy.
+        You can close players, pause sources, remove optional sources and reset preferences in Feed.
       </p>
 
       <h2>Processors</h2>
@@ -69,6 +79,7 @@ export default function PrivacyPage() {
         <li>When you delete a workspace or your account, scheduled posts stop immediately and the data — including uploaded media and connection tokens — is permanently erased within 30 days.</li>
         <li>Expired sign-in sessions and one-time links are removed automatically; webhook records after 90 days.</li>
         <li>Social Inbox content is retained for 90 days by default (the operator can configure 7–365 days). Webhook wakeup digests are removed after 7 days.</li>
+        <li>Feed metadata expires from display after two hours unless refreshed. Daily maintenance removes unsaved metadata older than seven days and strips expired saved metadata down to a bookmark reference. Personal saves, follows and preferences remain until you remove them or delete your account. Browsing-session order expires after 30 minutes.</li>
         <li>Content already published to a network stays there; delete it on the network if you want it removed.</li>
       </ul>
 

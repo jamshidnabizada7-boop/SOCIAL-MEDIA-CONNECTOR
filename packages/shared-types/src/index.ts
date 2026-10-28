@@ -553,3 +553,5 @@ export function resolveNotificationPrefs(stored: Record<string, boolean> | null 
 /* Provider capability registry (canonical, backend-side)              */
 /* ------------------------------------------------------------------ */
 export * from "./providers.js";
+export * from "./feed.js";
+export * from "./feed-mixer.js";

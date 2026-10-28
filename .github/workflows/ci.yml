@@ -38,6 +38,7 @@ jobs:
           path: |
             test-results/
             .local/load-test.json
+            .local/feed-evidence/
           retention-days: 7
   containers:
     runs-on: ubuntu-latest

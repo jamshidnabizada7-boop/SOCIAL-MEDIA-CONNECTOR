@@ -16,3 +16,4 @@ export * from "./instagram.js";
 export * from "./pinterest.js";
 export * from "./metrics.js";
 export * from "./engagement/index.js";
+export * from "./feed/index.js";
