@@ -25,6 +25,25 @@ See [the current handoff](docs/PROJECT-STATUS.md) and
 
 [Architecture](docs/ARCHITECTURE.md) · [Deployment/runbook](deploy/DEPLOY.md)
 
+## Complete Oracle deployment source
+
+This repository contains the full Social Media Connector application deployed
+at `/opt/ariahub-v2` on Oracle: the frontend, API, worker, provider clients,
+database schema and migrations, shared packages, tests, Docker files and
+deployment/recovery tooling. Its full development history is included.
+
+The exact Oracle application revision is
+[`oracle-b831ae2`](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/tree/oracle-b831ae2).
+A SHA-256 comparison verified all 272 files in that revision against the Oracle
+installation. The `master` branch also includes newer handoff documentation.
+
+[Download the complete Oracle source as a ZIP](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/archive/refs/tags/oracle-b831ae2.zip).
+
+Production `.env` credentials, live database/media volumes and backup archives
+are runtime state kept on Oracle. Configuration templates are included in
+`.env.example` and `deploy/env.production.example`; deployment and private data
+recovery are documented in [the runbook](deploy/DEPLOY.md).
+
 ## Local development
 
 Use Node 24 LTS (Node 22.12+ is also supported) and npm. No cloud account is needed.
