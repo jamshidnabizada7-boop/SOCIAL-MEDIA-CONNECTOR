@@ -2,15 +2,13 @@
 
 /**
  * API-backed implementations of the UI service interfaces. Selected by
- * NEXT_PUBLIC_DATA_MODE=api (default stays "mock" so the design demo remains
- * pristine). Same shapes the pages already consume — no UI redesign.
+ * NEXT_PUBLIC_DATA_MODE=api (the production default). An explicit "mock"
+ * selects the separate offline design demo.
  *
  * Live-updating: services poll on an interval while subscribed; server state
  * is durable, so resumeInFlight is a no-op.
  *
- * Coverage in this pass (api mode): auth/session, accounts, posts,
- * notifications, workspaces+brands+members. Analytics/admin/billing/queue/
- * media remain mock-backed and are clearly labeled in the UI where relevant.
+ * Analytics/admin/billing/queue/media have dedicated API services.
  */
 
 import type {
@@ -32,7 +30,6 @@ import type { AccountsService } from "@/lib/services/accounts";
 import type { NotificationsService } from "@/lib/services/notifications";
 import type { WorkspaceService } from "@/lib/services/workspace";
 import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from "@/lib/api/client";
-import { INVOICES, SUBSCRIPTION, USAGE } from "@/lib/mock/data";
 
 /* ------------------------------- shared ---------------------------------- */
 
@@ -692,17 +689,18 @@ export class ApiWorkspaceService implements WorkspaceService {
     await this.membersAsync();
   }
 
-  // Billing surfaces stay on mock data until Stripe (production phase).
+  // Live billing is asynchronous: callers must use fetchWorkspaceBilling.
+  // Never substitute demo subscriptions or invoices when the request fails.
   subscription(): Subscription {
-    return SUBSCRIPTION;
+    throw new ApiError(503, "billing_not_loaded", "Billing data hasn't loaded. Please try again.");
   }
 
   usage(): Usage {
-    return USAGE;
+    throw new ApiError(503, "billing_not_loaded", "Usage data hasn't loaded. Please try again.");
   }
 
   invoices(): Invoice[] {
-    return INVOICES;
+    throw new ApiError(503, "billing_not_loaded", "Invoices haven't loaded. Please try again.");
   }
 
   async changePlan(_plan: unknown): Promise<void> {

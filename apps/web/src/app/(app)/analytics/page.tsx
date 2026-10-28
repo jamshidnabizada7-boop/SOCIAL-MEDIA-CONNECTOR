@@ -15,7 +15,8 @@ import { PROVIDERS } from "@/lib/providers";
 import { useToast } from "@/components/providers";
 import { formatNumber, timeAgo } from "@/lib/utils";
 
-function Delta({ value }: { value: number }) {
+function Delta({ value }: { value: number | null }) {
+  if (value === null) return <span className="text-[12px] text-ink-3">Comparison unavailable</span>;
   const up = value >= 0;
   return (
     <span className={`inline-flex items-center gap-1 text-[12px] font-semibold ${up ? "text-success-ink" : "text-danger-ink"}`}>
@@ -39,7 +40,7 @@ export default function AnalyticsPage() {
       .catch((err: Error) => toast({ title: "Couldn't load analytics", description: err.message, variant: "error" }));
   }, [range, toast]);
 
-  const series = useMemo(() => (data ? data.series.map((p) => ({ date: p.date, value: p[metric] })) : []), [data, metric]);
+  const series = useMemo(() => (data ? data.series.flatMap((p) => p[metric] === null ? [] : [{ date: p.date, value: p[metric] as number }]) : []), [data, metric]);
 
   if (!data) {
     return (
@@ -92,7 +93,7 @@ export default function AnalyticsPage() {
     URL.revokeObjectURL(url);
     toast({ title: "Analytics exported", variant: "success" });
   };
-  const stat = (label: string, value: number | null, delta: number, spark: number[]) => (
+  const stat = (label: string, value: number | null, delta: number | null, spark: Array<number | null>) => (
     <Card className="flex items-center justify-between p-4">
       <div>
         <p className="text-[13px] font-medium text-ink-2">{label}</p>
@@ -101,7 +102,7 @@ export default function AnalyticsPage() {
         </p>
         <div className="mt-1.5"><Delta value={delta} /></div>
       </div>
-      <Sparkline values={spark} className="h-10 w-28" color="var(--accent)" />
+      {spark.length > 0 && spark.every((n) => n !== null) && <Sparkline values={spark as number[]} className="h-10 w-28" color="var(--accent)" />}
     </Card>
   );
 
@@ -133,7 +134,7 @@ export default function AnalyticsPage() {
           {stat(live ? "Posts published" : "Impressions", live ? data.series.reduce((a, p) => a + p.impressions, 0) : data.overview.impressions, data.deltas.impressions, data.series.slice(-14).map((p) => p.impressions))}
           {!live && stat("Engagements", data.overview.engagements, data.deltas.engagements, data.series.slice(-14).map((p) => p.engagements))}
           {stat("Total followers", data.overview.followers, data.deltas.followers, live ? [] : data.series.slice(-14).map((p) => Math.round(p.impressions * 12.4)))}
-          {!live && stat("Link clicks", data.overview.clicks, data.deltas.clicks, data.series.slice(-14).map((p) => Math.round(p.engagements * 0.6)))}
+          {!live && stat("Link clicks", data.overview.clicks, data.deltas.clicks, data.series.slice(-14).map((p) => p.engagements === null ? null : Math.round(p.engagements * 0.6)))}
           {live && stat("Engagements", data.overview.engagements, data.deltas.engagements, data.series.slice(-14).map((p) => p.engagements))}
         </div>
 

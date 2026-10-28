@@ -20,6 +20,7 @@ export default function PrivacyPage() {
         <li><strong>Account data</strong> — your name, email address, a salted hash of your password, sign-in records (IP address, browser) and your workspace memberships and roles.</li>
         <li><strong>Connected social accounts</strong> — the account or page id, name, handle, follower count and the access tokens the network issues when you authorize Aria Hub. Tokens are encrypted at rest (AES-256-GCM) and are never shown to anyone.</li>
         <li><strong>Content</strong> — the posts, captions, links, schedules and media you create or upload, and per-network settings.</li>
+        <li><strong>Social Inbox</strong> — comments, mentions and replies returned by supported networks for your connected accounts, the sender&apos;s public profile details, conversation links, handling states, team assignments and replies your team chooses to send. Private messages are not currently collected.</li>
         <li><strong>Delivery and performance data</strong> — publish attempts, the network&apos;s post id and link, and engagement counts (for example likes, replies, reposts, views) that the network returns for posts published through Aria Hub.</li>
         <li><strong>Billing data</strong> — for paid plans, your subscription status. Card details are collected and stored by Stripe, never by us.</li>
       </ul>
@@ -29,6 +30,7 @@ export default function PrivacyPage() {
         <li>To publish and schedule the content you ask us to, to the accounts you connected, and to show you whether delivery succeeded.</li>
         <li>To keep connections working (refreshing tokens before they expire) and to alert you by in-app notification and, if enabled, email when something needs your attention.</li>
         <li>To show analytics about posts you published through Aria Hub.</li>
+        <li>To synchronize supported social interactions into your workspace Inbox and send the replies your team requests, using the additional permissions you choose to grant.</li>
         <li>To secure the service (rate limiting, lockouts, audit logs) and to bill paid plans.</li>
       </ul>
       <p>We do not sell personal data, use it for advertising, or use your content to train machine-learning models.</p>
@@ -66,6 +68,7 @@ export default function PrivacyPage() {
         <li>Account and workspace data is kept while your account exists.</li>
         <li>When you delete a workspace or your account, scheduled posts stop immediately and the data — including uploaded media and connection tokens — is permanently erased within 30 days.</li>
         <li>Expired sign-in sessions and one-time links are removed automatically; webhook records after 90 days.</li>
+        <li>Social Inbox content is retained for 90 days by default (the operator can configure 7–365 days). Webhook wakeup digests are removed after 7 days.</li>
         <li>Content already published to a network stays there; delete it on the network if you want it removed.</li>
       </ul>
 

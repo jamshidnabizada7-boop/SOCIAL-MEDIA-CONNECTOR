@@ -5,6 +5,7 @@ import pino from "pino";
 import { assertEncryptionKey } from "@aria/db";
 import { flagExpiringTokens, refreshExpiringTokens } from "@aria/providers-core";
 import { workerConfig } from "./config.js";
+import { assertAdapterMode } from "./adapters/registry.js";
 import { openDatabase, processPublishJob, processReconcileJob } from "./pipeline/publish.js";
 import { claimJobs, heartbeat, jobOutcome, LEASE_MS, type ClaimedJob } from "./pipeline/jobs.js";
 import { runMaintenance } from "./maintenance.js";
@@ -20,6 +21,7 @@ const IDLE_POLL_MS = 2_000;
 const BUSY_POLL_MS = 250;
 
 async function main() {
+  assertAdapterMode();
   if (process.env.NODE_ENV === "production") assertEncryptionKey();
   const handle = await openDatabase();
   logger.info({ driver: handle.driver, workerId: WORKER_ID, concurrency: workerConfig.WORKER_CONCURRENCY }, "worker starting");

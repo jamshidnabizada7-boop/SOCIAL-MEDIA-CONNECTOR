@@ -33,20 +33,25 @@ function BillingInner() {
   const [targetPlan, setTargetPlan] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [apiBilling, setApiBilling] = useState<WorkspaceBilling | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const workspace = session?.workspace;
   const load = useCallback(async () => {
     if (!workspace) return;
+    setLoaded(false);
+    setLoadError(null);
+    setApiBilling(null);
+    setInvoices([]);
     try {
       const billing = await fetchWorkspaceBilling(workspace);
       setApiBilling(billing);
       setInvoices(billing.invoices);
     } catch (err) {
-      toast({ title: "Couldn't load billing", description: (err as Error).message, variant: "error" });
+      setLoadError((err as Error).message);
     } finally {
       setLoaded(true);
     }
-  }, [workspace, toast]);
+  }, [workspace]);
 
   useEffect(() => {
     if (DATA_MODE === "api") {
@@ -62,7 +67,7 @@ function BillingInner() {
     const outcome = params.get("checkout");
     if (DATA_MODE !== "api" || !outcome) return;
     if (outcome === "success") {
-      toast({ title: "Payment received", description: "Your plan updates as soon as Stripe confirms — usually within seconds.", variant: "success" });
+      toast({ title: "Checking payment confirmation", description: "Your plan updates after Stripe confirms your payment.", variant: "info" });
       const t = window.setTimeout(() => {
         void load();
         void refresh();
@@ -84,8 +89,23 @@ function BillingInner() {
     );
   }
 
-  const sub: Subscription = apiBilling?.subscription ?? workspaceService.subscription();
-  const usage: Usage = apiBilling?.usage ?? workspaceService.usage();
+  if (DATA_MODE === "api" && (!apiBilling || loadError)) {
+    return (
+      <div>
+        <PageHeader title="Billing" />
+        <PageBody>
+          <div role="alert" className="rounded-xl border border-danger/30 bg-danger-soft p-5 text-sm text-danger-ink">
+            <p className="font-semibold">Billing is unavailable</p>
+            <p className="mt-1">{loadError || "The server hasn't returned billing data."}</p>
+            <Button variant="secondary" className="mt-3" onClick={() => void load()}>Try again</Button>
+          </div>
+        </PageBody>
+      </div>
+    );
+  }
+
+  const sub: Subscription = DATA_MODE === "api" ? apiBilling!.subscription : workspaceService.subscription();
+  const usage: Usage = DATA_MODE === "api" ? apiBilling!.usage : workspaceService.usage();
   const isDowngrade = (planId: string) => PLAN_ORDER.indexOf(planId) < PLAN_ORDER.indexOf(sub.plan.id);
   const api = DATA_MODE === "api";
   const canBuy = (planId: string) => !api || planId === "free" || !!apiBilling?.purchasable.has(planId);
@@ -280,11 +300,11 @@ function BillingInner() {
                           <a href={inv.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent-ink hover:underline">
                             <Download className="size-3.5" /> View
                           </a>
-                        ) : (
+                        ) : !api ? (
                           <button onClick={() => toast({ title: `Downloading ${inv.number}.pdf…`, variant: "info" })} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent-ink hover:underline">
                             <Download className="size-3.5" /> PDF
                           </button>
-                        )}
+                        ) : <span className="text-ink-3">Unavailable</span>}
                       </td>
                     </tr>
                   ))}

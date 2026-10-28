@@ -46,6 +46,7 @@ function unsupportedAdapter(id: ProviderId): SocialProviderAdapter {
  * a real integration fail closed — never the mock — outside mock mode.
  */
 export function getAdapter(id: ProviderId): SocialProviderAdapter {
+  assertAdapterMode();
   if (process.env.ARIA_ADAPTER_MODE === "mock") {
     return getMockAdapter(id);
   }
@@ -70,6 +71,13 @@ export function getAdapter(id: ProviderId): SocialProviderAdapter {
       return pinterestAdapter;
     default:
       return unsupportedAdapter(id);
+  }
+}
+
+/** Reject simulated delivery before a production worker can claim any jobs. */
+export function assertAdapterMode(): void {
+  if (process.env.NODE_ENV === "production" && process.env.ARIA_ADAPTER_MODE === "mock") {
+    throw new Error("ARIA_ADAPTER_MODE=mock is forbidden in production. No publishing jobs were accepted.");
   }
 }
 

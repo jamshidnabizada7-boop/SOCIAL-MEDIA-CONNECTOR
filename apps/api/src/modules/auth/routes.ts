@@ -87,7 +87,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       actionUrl: url,
       footer: "The link expires in 3 days. If you didn't create an account, ignore this email.",
     });
-    await sendMail(req.log, { to: user.email, subject: "Confirm your Aria Hub email", ...body });
+    return sendMail(req.log, { to: user.email, subject: "Confirm your Aria Hub email", ...body });
   }
 
   app.post(
@@ -280,7 +280,8 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       const user = (await db.select().from(users).where(eq(users.id, req.user!.id)).limit(1))[0];
       if (!user) return reply.status(404).send({ error: { code: "not_found", message: "Account not found." } });
       if (user.emailVerifiedAt) return reply.send({ ok: true, alreadyVerified: true });
-      await sendVerification(req, user);
+      const mail = await sendVerification(req, user);
+      if (!mail.delivered) return reply.status(503).send({ error: { code: "email_unavailable", message: "The confirmation email couldn't be sent. Please try again later or contact support." } });
       return reply.send({ ok: true });
     }
   );
