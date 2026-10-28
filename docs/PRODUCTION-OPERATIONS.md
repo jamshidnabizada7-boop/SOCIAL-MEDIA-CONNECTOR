@@ -15,6 +15,8 @@ python -m unittest discover -s scripts -p '*_test.py'
 
 Public uptime checks do not establish that every provider is approved or that every private account works. Provider deliveries and Inbox replies have separate acceptance evidence in the dated verification report.
 
+On Oracle, `ariahub-v2-monitor.timer` checks every five minutes: runtime containers, tunnel, enabled backup timer, last backup result, snapshot age (36-hour ceiling), disk headroom (2 GiB minimum), provider circuits and publishing failure rate. It sends an SMTP notification to the same operator address when the set of failed checks changes and when it recovers. Its persistent state contains only failure codes and a timestamp. The GitHub monitor covers whole-host outages that this local monitor cannot report while the VPS is down.
+
 ## Encrypted offsite backup uploader
 
 The existing Oracle systemd timer creates a quiesced local PostgreSQL/media snapshot at 03:00 UTC (08:00 Asia/Karachi). The Codex heartbeat **Aria Hub encrypted offsite backups** checks hourly for a newer completed snapshot and uploads its encrypted export to the private Google Drive folder **Aria Hub encrypted production backups**. It preserves existing copies and recovery keys, avoids duplicate filenames and verifies a downloaded copy by SHA-256. Failures, stale snapshots and recovery are reported; routine successful checks stay quiet.

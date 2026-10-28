@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Aria Hub v2 components and backup freshness every five minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=ariahub-v2-monitor.service
+
+[Install]
+WantedBy=timers.target
