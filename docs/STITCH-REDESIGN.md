@@ -87,8 +87,11 @@ this is not used as release evidence for native PostgreSQL. Rate limits stay
 enabled: the connection browser test observes `Retry-After` and uses the dialog's
 retry when the suite's shared IP reaches its budget.
 
-This implementation is based on `codex/universal-feed` and requires that Feed
-change first. It has not been deployed on Oracle. Production remains at the
-previous deployed revision; the previously documented Oracle disk-headroom
-release gate still applies. No production database, provider credentials,
-backups, social content or OAuth settings were changed during this UI task.
+This implementation includes the `codex/universal-feed` dependency. It was
+deployed to `/opt/ariahub-v2` on Oracle on 29 October 2026, at application revision
+`1d017e373c143256f728d82ea07f61ba6f9857fc`. The user authorized freeing SehatAI
+space while preserving the independent older Aria Hub installation. Removing
+only dependency folders from five inactive SehatAI releases freed 1.31 GB.
+Checksummed ARM64 runtime images were built on GitHub to avoid host compilation.
+The additive Feed migration completed; API, worker, web and PostgreSQL are healthy.
+See [deployment and live verification](ORACLE-STITCH-DEPLOYMENT-2026-10-29.md).
