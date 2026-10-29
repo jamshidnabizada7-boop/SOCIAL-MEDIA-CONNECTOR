@@ -140,7 +140,7 @@ export function FeedPlayer({
       !closed &&
       (!direct || automatic || userStarted);
   const provider = PROVIDERS[item.provider].name;
-  const url = load ? new URL(item.embedUrl!) : null;
+  const url = load && !direct ? new URL(item.embedUrl!) : null;
   if (url && item.provider === "youtube") {
     url.searchParams.set("playsinline", "1");
     url.searchParams.set("autoplay", "0");

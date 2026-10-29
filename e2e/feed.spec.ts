@@ -123,6 +123,7 @@ test("mobile Feed navigation, official single-player lifecycle, video arrows and
     timeout: 40000,
   });
   await page.getByRole("tab", { name: "Videos", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Bluesky", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Immersive video browsing" }),
   ).toBeVisible();
