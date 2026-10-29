@@ -88,6 +88,8 @@ export function FeedPlayer({
   const node = useRef<HTMLDivElement>(null),
     [visible, setVisible] = useState(false),
     [inView, setInView] = useState(false),
+    [automatic, setAutomatic] = useState(false),
+    [userStarted, setUserStarted] = useState(false),
     [closed, setClosed] = useState(false);
   const direct =
     item.provider === "bluesky" &&
@@ -100,14 +102,17 @@ export function FeedPlayer({
     const saveData = (
       navigator as Navigator & { connection?: { saveData?: boolean } }
     ).connection?.saveData;
+    const eligible =
+      autoPlay &&
+      !saveData &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setAutomatic(eligible);
     if (
       showing &&
       !closed &&
-      autoPlay &&
+      eligible &&
       !item.sample &&
       (direct || (item.provider === "facebook" && item.canEmbed)) &&
-      !saveData &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
       document.visibilityState === "visible"
     )
       onActivate();
@@ -127,7 +132,13 @@ export function FeedPlayer({
   const valid =
       direct ||
       (item.canEmbed && isOfficialFeedEmbed(item.provider, item.embedUrl)),
-    load = active && allowed && visible && valid && !closed;
+    load =
+      active &&
+      allowed &&
+      visible &&
+      valid &&
+      !closed &&
+      (!direct || automatic || userStarted);
   const provider = PROVIDERS[item.provider].name;
   const url = load ? new URL(item.embedUrl!) : null;
   if (url && item.provider === "youtube") {
@@ -139,7 +150,10 @@ export function FeedPlayer({
     url.searchParams.set("autoplay", "0");
   }
   if (url && item.provider === "facebook") {
-    url.searchParams.set("autoplay", "true");
+    url.searchParams.set(
+      "autoplay",
+      automatic || userStarted ? "true" : "false",
+    );
     url.searchParams.set("mute", "true");
   }
   return (
@@ -159,7 +173,7 @@ export function FeedPlayer({
           url={item.playbackUrl!}
           poster={item.thumbnailUrl}
           author={item.authorName}
-          playing={active && inView}
+          playing={active && inView && (automatic || userStarted)}
           onActivate={onActivate}
           immersive={immersive}
         />
@@ -225,6 +239,7 @@ export function FeedPlayer({
               <Button
                 onClick={() => {
                   setClosed(false);
+                  setUserStarted(true);
                   onActivate();
                 }}
                 size="lg"

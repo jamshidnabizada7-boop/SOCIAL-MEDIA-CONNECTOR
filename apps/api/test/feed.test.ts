@@ -503,13 +503,20 @@ describe("feed authorization, caching and durable personalization", () => {
     const item = (await get("?view=saved")).json<FeedPage>().items[0];
     await app.database.db
       .update(feedItems)
-      .set({ expiresAt: new Date(0) })
+      .set({
+        expiresAt: new Date(0),
+        content: {
+          ...item,
+          playbackUrl:
+            "https://video.bsky.app/watch/did%3Aplc%3Aauthor0/fixturevideo/playlist.m3u8",
+        },
+      })
       .where(eq(feedItems.id, item.id));
     const saved = (await get("?view=saved")).json<FeedPage>().items[0];
     expect(saved.availability).toBe("unavailable");
     expect(saved.caption).toBe("");
     expect(saved.embedUrl).toBeUndefined();
-      expect(saved.playbackUrl).toBeUndefined();
+    expect(saved.playbackUrl).toBeUndefined();
     expect(saved.images).toEqual([]);
     await mutate("DELETE", `/saved/${item.id}`);
   });
@@ -737,6 +744,16 @@ describe("feed worker claims, failures and retention", () => {
       .insert(feedSaved)
       .values({ userId, itemId: kept.id })
       .onConflictDoNothing();
+    await app.database.db
+      .update(feedItems)
+      .set({
+        content: {
+          ...kept.content,
+          playbackUrl:
+            "https://video.bsky.app/watch/did%3Aplc%3Aauthor0/fixturevideo/playlist.m3u8",
+        },
+      })
+      .where(eq(feedItems.id, kept.id));
     await retainFeed(app.database.db, new Date(Date.now() + 3 * 86400000));
     expect((await app.database.db.select().from(feedSessions)).length).toBe(0);
     const [reference] = await app.database.db
@@ -747,6 +764,7 @@ describe("feed worker claims, failures and retention", () => {
     expect(reference.content.caption).toBe("");
     expect(reference.content.images).toEqual([]);
     expect(reference.content.embedUrl).toBeUndefined();
+    expect(reference.content.playbackUrl).toBeUndefined();
     expect(reference.content.availability).toBe("unavailable");
   });
 });

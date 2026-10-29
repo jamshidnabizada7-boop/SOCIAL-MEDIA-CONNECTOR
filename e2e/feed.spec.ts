@@ -158,6 +158,24 @@ test("mobile Feed navigation, official single-player lifecycle, video arrows and
     path: ".local/feed-evidence/universal-feed-mobile-video.png",
     fullPage: false,
   });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("tab", { name: "Posts", exact: true }).click();
+  await page.getByRole("tab", { name: "Videos", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Play video", exact: true }).first(),
+  ).toBeVisible();
+  await expect(video).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Play video", exact: true })
+    .first()
+    .click();
+  await expect
+    .poll(() =>
+      video.evaluate(
+        (el: HTMLVideoElement) => !el.paused && el.currentTime > 0,
+      ),
+    )
+    .toBe(true);
   await page.getByRole("tab", { name: "Posts", exact: true }).click();
   await page.route("**/v1/workspaces/*/feed?**", (route) =>
     route.fulfill({
