@@ -1,6 +1,14 @@
 # Project handoff — 29 October 2026
 
-The full project is in [GitHub](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR) and live on Oracle at [app.myariahub.com](https://app.myariahub.com). The deployed application revision is `1d017e373c143256f728d82ea07f61ba6f9857fc` on `codex/stitch-redesign`, including Universal Feed and all eight Stitch screens. PR #1 is merged; PR #3 is ready for review and depends on PR #2. Production secrets, databases, uploaded media and recovery material remain private runtime state. See the [latest deployment evidence](ORACLE-STITCH-DEPLOYMENT-2026-10-29.md).
+Universal search and feed media fixes are now deployed at application revision
+`d75bbb80cbd83d81de0e9c34ed5b8734a3d1bab0` on `codex/universal-search`, in
+[PR #4](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/pull/4).
+Live account search, Bluesky/Facebook muted video autoplay and Facebook photos were verified.
+The release passed 254 application tests and 17 browser cases; see the
+[production search/media report](ORACLE-SEARCH-MEDIA-RELEASE-2026-10-29.md).
+Provider feed restrictions remain explicit in the product and coverage guide.
+
+The full project is in [GitHub](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR) and live on Oracle at [app.myariahub.com](https://app.myariahub.com). The previous Stitch release was `1d017e373c143256f728d82ea07f61ba6f9857fc`, including Universal Feed and all eight Stitch screens. PR #1 is merged; PR #3 is ready for review and depends on PR #2. PR #4 builds on PR #3. Production secrets, databases, uploaded media and recovery material remain private runtime state. See the [Stitch deployment evidence](ORACLE-STITCH-DEPLOYMENT-2026-10-29.md) and the newer search/media report above.
 
 ## Universal Feed and Stitch UI (deployed)
 
