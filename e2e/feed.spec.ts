@@ -123,11 +123,14 @@ test("mobile Feed navigation, official single-player lifecycle, video arrows and
     timeout: 40000,
   });
   await page.getByRole("tab", { name: "Videos", exact: true }).click();
-  await page.getByRole("checkbox", { name: "Bluesky", exact: true }).click();
+  await page.getByRole("button", { name: "Bluesky", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Immersive video browsing" }),
   ).toBeVisible();
   const video = page.locator('video[data-aria-video="bluesky"]');
+  await page
+    .getByRole("region", { name: "Video feed", exact: true })
+    .scrollIntoViewIfNeeded();
   await expect(video).toHaveCount(1);
   await expect
     .poll(() =>
@@ -162,6 +165,9 @@ test("mobile Feed navigation, official single-player lifecycle, video arrows and
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("tab", { name: "Posts", exact: true }).click();
   await page.getByRole("tab", { name: "Videos", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Video feed", exact: true })
+    .scrollIntoViewIfNeeded();
   await expect(
     page.getByRole("button", { name: "Play video", exact: true }).first(),
   ).toBeVisible();

@@ -9,6 +9,8 @@ on:
       - deploy/web.Dockerfile
       - apps/**
       - packages/**
+      - e2e/**
+      - e2e-demo/**
       - package.json
       - package-lock.json
 permissions:
