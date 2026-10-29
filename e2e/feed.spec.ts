@@ -38,7 +38,7 @@ test("mixed API feed paginates without duplicates and persists user saves and cr
   await signup(page);
   await page.goto("/feed");
   await expect(
-    page.getByRole("heading", { name: "Feed", exact: true }),
+    page.getByRole("heading", { name: "Home Feed", exact: true }),
   ).toBeVisible();
   await expect(page.locator("article[data-feed-id]").first()).toBeVisible({
     timeout: 40000,
@@ -100,7 +100,7 @@ test("mobile Feed navigation, official single-player lifecycle, video arrows and
   await page.getByRole("button", { name: "Open navigation" }).click();
   await page
     .getByRole("dialog", { name: "Mobile navigation" })
-    .getByRole("link", { name: "Feed", exact: true })
+    .getByRole("link", { name: "Home", exact: true })
     .click();
   await expect(page).toHaveURL(/\/feed$/);
   await expect(

@@ -67,6 +67,20 @@ For an existing installation whose named tunnel is managed by systemd, use
 `ARIA_TUNNEL_MODE=external DEPLOY_HOST=ariahub-oracle sh deploy/deploy.sh`.
 This preserves the existing tunnel instead of starting a second container.
 
+For a host with limited build space, the `Oracle ARM64 release images` Actions
+workflow builds production runtime images on a native ARM runner and exports a
+checksummed artifact for its exact commit. Its web build uses the repository's
+`ARIA_LEGAL_ENTITY`, `ARIA_CONTACT_EMAIL`, `ARIA_LEGAL_UPDATED` and optional
+`ARIA_PUBLIC_SENTRY_DSN` public build variables. Keep these consistent with the
+existing production web build; no runtime credentials belong in this artifact.
+Verify the downloaded artifact's manifest and commit, load its images, preserve
+the current runtime image tags for rollback, and tag the loaded images with the
+names expected by Compose. Then deploy that same clean committed checkout with
+`ARIA_USE_PREBUILT=1 ARIA_TUNNEL_MODE=external DEPLOY_HOST=ariahub-oracle sh deploy/deploy.sh`.
+This skips host compilation only after checking both images' revision labels and
+architecture. It still takes the deployment lock, runs migrations and waits for
+service health. Take a quiesced backup before the upgrade as usual.
+
 The script archives committed HEAD, stores its source archive under `releases/`,
 builds images, stops writers, runs migrations, starts services, and checks API and
 worker and web health. It holds `.aria-operations.lock` through deployment so

@@ -101,6 +101,7 @@ services:
     logging: *logging
 
   web:
+    image: ${ARIA_WEB_IMAGE:-ariahub-v2-web:latest}
     build:
       context: ..
       dockerfile: deploy/web.Dockerfile

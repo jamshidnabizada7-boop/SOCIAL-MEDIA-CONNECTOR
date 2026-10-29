@@ -34,7 +34,8 @@ export function useTheme() {
 function applyTheme(mode: ThemeMode) {
   const dark =
     mode === "dark" ||
-    (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    (mode === "system" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
 }
 
@@ -95,7 +96,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
   // Theme
   const [mode, setModeState] = useState<ThemeMode>("system");
   useEffect(() => {
-    const stored = (localStorage.getItem("aria-theme") as ThemeMode) || "system";
+    const stored =
+      (localStorage.getItem("aria-theme") as ThemeMode) || "system";
     setModeState(stored);
     applyTheme(stored);
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -138,37 +140,46 @@ export function AppProviders({ children }: { children: ReactNode }) {
         // First sign-in (or the last workspace was deleted): every account
         // needs a home. Onboarding renames it.
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-        await sessionApi.createWorkspace(`${me.user.name.split(" ")[0] || "My"}'s workspace`, tz);
+        await sessionApi.createWorkspace(
+          `${me.user.name.split(" ")[0] || "My"}'s workspace`,
+          tz,
+        );
         me = await sessionApi.me();
       }
       const wsSummaries: ApiWorkspaceSummary[] = me.workspaces;
       if (wsSummaries.length === 0) return null;
-      const preferred = localStorage.getItem('aria-workspace');
-      const summary = wsSummaries.find((w) => w.workspaceId === preferred) ?? wsSummaries[0];
-      const { apiWorkspaceService } = await import('@/lib/services/backend');
-      const full = (await apiWorkspaceService.getDetail(summary.workspaceId)) ?? null;
-      const workspace: Workspace =
-        full ?? {
-          id: summary.workspaceId,
-          name: summary.name,
-          timezone: summary.timezone,
-          locale: summary.locale,
-          plan: summary.planId as Workspace['plan'],
-          brands: [],
-          createdAt: new Date().toISOString(),
-        };
+      const preferred = localStorage.getItem("aria-workspace");
+      const summary =
+        wsSummaries.find((w) => w.workspaceId === preferred) ?? wsSummaries[0];
+      // The authenticated membership list validates any persisted workspace choice.
+      localStorage.setItem("aria-workspace", summary.workspaceId);
+      const { apiWorkspaceService } = await import("@/lib/services/backend");
+      const full =
+        (await apiWorkspaceService.getDetail(summary.workspaceId)) ?? null;
+      const workspace: Workspace = full ?? {
+        id: summary.workspaceId,
+        name: summary.name,
+        timezone: summary.timezone,
+        locale: summary.locale,
+        plan: summary.planId as Workspace["plan"],
+        brands: [],
+        createdAt: new Date().toISOString(),
+      };
       const user: User = {
         id: me.user.id,
         name: me.user.name,
         email: me.user.email,
         avatarHue: me.user.avatarHue ?? 200,
-        role: (wsSummaries.find((w) => w.workspaceId === workspace.id)?.role as User['role']) ?? 'owner',
+        role:
+          (wsSummaries.find((w) => w.workspaceId === workspace.id)
+            ?.role as User["role"]) ?? "owner",
         isAdmin: me.user.isPlatformAdmin,
         emailVerified: me.user.emailVerified ?? true,
         lastActiveAt: new Date().toISOString(),
-        status: 'active',
+        status: "active",
       };
-      const brandId = localStorage.getItem('aria-brand') ?? workspace.brands[0]?.id ?? null;
+      const brandId =
+        localStorage.getItem("aria-brand") ?? workspace.brands[0]?.id ?? null;
       return { user, workspace, brandId };
     } catch {
       return null;
@@ -177,15 +188,20 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   const readSession = useCallback((): Session | null => {
     try {
-      const raw = localStorage.getItem('aria-session');
+      const raw = localStorage.getItem("aria-session");
       if (!raw) return null;
       const email = JSON.parse(raw) as string;
       const user = USERS.find((u) => u.email === email) ?? USERS[0];
-      const wsId = localStorage.getItem('aria-workspace') ?? 'ws_aria';
-      const brandId = localStorage.getItem('aria-brand');
-      const workspace = workspaceService.get(wsId) ?? workspaceService.workspaces()[0];
+      const wsId = localStorage.getItem("aria-workspace") ?? "ws_aria";
+      const brandId = localStorage.getItem("aria-brand");
+      const workspace =
+        workspaceService.get(wsId) ?? workspaceService.workspaces()[0];
       if (!workspace) return null;
-      return { user, workspace, brandId: brandId ?? workspace.brands[0]?.id ?? null };
+      return {
+        user,
+        workspace,
+        brandId: brandId ?? workspace.brands[0]?.id ?? null,
+      };
     } catch {
       return null;
     }
@@ -193,7 +209,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let alive = true;
-    if (DATA_MODE === 'api') {
+    if (DATA_MODE === "api") {
       buildApiSession().then((s) => {
         if (!alive) return;
         setSession(s);
@@ -210,7 +226,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (DATA_MODE === 'api') {
+    if (DATA_MODE === "api") {
       setSession(await buildApiSession());
     } else {
       setSession(readSession());
@@ -219,60 +235,76 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (email?: string, password?: string) => {
-      if (DATA_MODE === 'api') {
-        await sessionApi.login(email ?? '', password ?? '');
+      if (DATA_MODE === "api") {
+        await sessionApi.login(email ?? "", password ?? "");
         await refresh();
         return;
       }
       const mail = email ?? USERS.find((u) => u.id === CURRENT_USER_ID)!.email;
-      localStorage.setItem('aria-session', JSON.stringify(mail));
+      localStorage.setItem("aria-session", JSON.stringify(mail));
       setSession(readSession());
     },
-    [readSession, refresh]
+    [readSession, refresh],
   );
 
   const signUp = useCallback(
     async (name: string, email: string, password: string) => {
-      if (DATA_MODE === 'api') {
+      if (DATA_MODE === "api") {
         await sessionApi.register(name, email, password);
         await refresh();
         return;
       }
       await signIn(email, password);
     },
-    [signIn, refresh]
+    [signIn, refresh],
   );
 
   const signOut = useCallback(() => {
-    if (DATA_MODE === 'api') {
+    if (DATA_MODE === "api") {
       void sessionApi.logout();
     }
-    localStorage.removeItem('aria-session');
+    localStorage.removeItem("aria-session");
     setSession(null);
   }, []);
 
   const setWorkspace = useCallback(
     (id: string) => {
-      localStorage.setItem('aria-workspace', id);
-      localStorage.removeItem('aria-brand');
+      localStorage.setItem("aria-workspace", id);
+      localStorage.removeItem("aria-brand");
+      if (DATA_MODE === "api") {
+        // Recreate service caches and cancel old-page requests across workspaces.
+        window.location.reload();
+        return;
+      }
       void refresh();
     },
-    [refresh]
+    [refresh],
   );
 
   const setBrand = useCallback(
     (id: string | null) => {
-      if (id) localStorage.setItem('aria-brand', id);
-      else localStorage.removeItem('aria-brand');
+      if (id) localStorage.setItem("aria-brand", id);
+      else localStorage.removeItem("aria-brand");
       void refresh();
     },
-    [refresh]
+    [refresh],
   );
 
   return (
     <ThemeContext.Provider value={{ mode, setMode }}>
       <ToastContext.Provider value={{ toast }}>
-        <SessionContext.Provider value={{ session, ready, signIn, signUp, signOut, setWorkspace, setBrand, refresh }}>
+        <SessionContext.Provider
+          value={{
+            session,
+            ready,
+            signIn,
+            signUp,
+            signOut,
+            setWorkspace,
+            setBrand,
+            refresh,
+          }}
+        >
           {children}
           {/* Toast viewport */}
           <div
@@ -287,21 +319,37 @@ export function AppProviders({ children }: { children: ReactNode }) {
                   "pop-in flex items-start gap-3 rounded-xl border bg-surface p-3.5 shadow-pop",
                   t.variant === "success" && "border-success/30",
                   t.variant === "error" && "border-danger/30",
-                  t.variant === "warning" && "border-warn/30"
+                  t.variant === "warning" && "border-warn/30",
                 )}
               >
                 {t.variant === "success" ? (
-                  <CheckCircle2 className="mt-0.5 size-4.5 shrink-0 text-success" aria-hidden />
+                  <CheckCircle2
+                    className="mt-0.5 size-4.5 shrink-0 text-success"
+                    aria-hidden
+                  />
                 ) : t.variant === "error" ? (
-                  <XCircle className="mt-0.5 size-4.5 shrink-0 text-danger" aria-hidden />
+                  <XCircle
+                    className="mt-0.5 size-4.5 shrink-0 text-danger"
+                    aria-hidden
+                  />
                 ) : t.variant === "warning" ? (
-                  <TriangleAlert className="mt-0.5 size-4.5 shrink-0 text-warn" aria-hidden />
+                  <TriangleAlert
+                    className="mt-0.5 size-4.5 shrink-0 text-warn"
+                    aria-hidden
+                  />
                 ) : (
-                  <Info className="mt-0.5 size-4.5 shrink-0 text-info" aria-hidden />
+                  <Info
+                    className="mt-0.5 size-4.5 shrink-0 text-info"
+                    aria-hidden
+                  />
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium leading-snug">{t.title}</p>
-                  {t.description && <p className="mt-0.5 text-sm leading-snug text-ink-2">{t.description}</p>}
+                  {t.description && (
+                    <p className="mt-0.5 text-sm leading-snug text-ink-2">
+                      {t.description}
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={() => dismiss(t.id)}

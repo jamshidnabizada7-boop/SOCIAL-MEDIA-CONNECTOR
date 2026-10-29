@@ -63,8 +63,8 @@ export function DestinationPanel({
   return (
     <div className={cn("flex flex-col", className)}>
       <div className="flex items-center justify-between gap-2 px-1">
-        <p className="text-[13px] font-semibold">
-          Destinations{" "}
+        <p className="font-display text-[17px] font-bold">
+          Target Platforms{" "}
           <span className={cn(
             "tnum ml-1 rounded-full px-1.5 py-0.5 text-[11px] font-bold",
             selected.length > 0 ? "bg-accent-soft text-accent-ink" : "bg-surface-2 text-ink-3"
@@ -112,7 +112,7 @@ export function DestinationPanel({
               <ProviderBadge provider={providerId as SocialAccount["provider"]} size="xs" />
               {PROVIDERS[providerId as SocialAccount["provider"]].name}
             </p>
-            <ul className="flex flex-col">
+            <ul className="flex flex-col gap-2">
               {list.map((a) => {
                 const isSel = selected.includes(a.id);
                 const unhealthy = a.connection === "needs_reauth" || a.connection === "disconnected";
@@ -123,13 +123,13 @@ export function DestinationPanel({
                       aria-checked={isSel}
                       onClick={() => onToggle(a.id)}
                       className={cn(
-                        "flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors",
-                        isSel ? "bg-accent-soft/70" : "hover:bg-surface-2"
+                        "flex min-h-20 w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors",
+                        isSel ? "bg-studio-soft ring-1 ring-accent/10" : "bg-surface-2 hover:bg-studio-soft"
                       )}
                     >
                       <span
                         className={cn(
-                          "flex size-4.5 shrink-0 items-center justify-center rounded-[5px] border transition-colors",
+                          "order-last flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors",
                           isSel ? "border-accent bg-accent text-on-accent" : "border-line-strong bg-surface"
                         )}
                         aria-hidden
@@ -140,16 +140,10 @@ export function DestinationPanel({
                           </svg>
                         )}
                       </span>
-                      <span
-                        className="flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                        style={{ background: `linear-gradient(135deg, hsl(${a.avatarHue} 50% 50%), hsl(${(a.avatarHue + 40) % 360} 55% 36%))` }}
-                        aria-hidden
-                      >
-                        {a.displayName.slice(0, 1).toUpperCase()}
-                      </span>
+                      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-surface"><ProviderBadge provider={a.provider} size="sm" /></span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] font-medium leading-tight">{a.displayName}</span>
-                        <span className="block truncate text-[11px] leading-tight text-ink-3">{a.handle}</span>
+                        <span className="block truncate text-sm font-semibold leading-tight">{a.displayName}</span>
+                        <span className="mt-1 block truncate text-xs leading-tight text-ink-2">{a.handle}</span>
                       </span>
                       {unhealthy ? (
                         <KeyRound className="size-4 shrink-0 text-danger" aria-label="Needs reauthorization" />

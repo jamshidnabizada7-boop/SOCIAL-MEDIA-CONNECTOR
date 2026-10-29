@@ -1,14 +1,27 @@
-# Project handoff — 28 October 2026
+# Project handoff — 29 October 2026
 
-The full project is in [GitHub master](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR) and live on Oracle at [app.myariahub.com](https://app.myariahub.com). The deployed application revision is `df68e34577878b09df0f313562fff5c630054826`; later documentation and GitHub monitor-schedule changes do not change application code. PR #1 is merged. Production secrets, databases, uploaded media and recovery material remain private runtime state.
+The full project is in [GitHub](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR) and live on Oracle at [app.myariahub.com](https://app.myariahub.com). The deployed application revision is `1d017e373c143256f728d82ea07f61ba6f9857fc` on `codex/stitch-redesign`, including Universal Feed and all eight Stitch screens. PR #1 is merged; PR #3 is ready for review and depends on PR #2. Production secrets, databases, uploaded media and recovery material remain private runtime state. See the [latest deployment evidence](ORACLE-STITCH-DEPLOYMENT-2026-10-29.md).
 
-## Universal Feed development (not deployed)
+## Universal Feed and Stitch UI (deployed)
+
+The subsequent [Stitch UI implementation, PR #3](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/pull/3)
+is on `codex/stitch-redesign`, based on the Feed branch. It implements all eight
+shared design screens, updates desktop/mobile navigation and preserves the real
+Feed, accounts, publishing and Inbox services. Workspace switching now resolves
+requests to the selected membership and recreates page/service state. A native
+PostgreSQL fixture is available to browser CI because the local embedded socket
+multiplexer can misroute concurrent protocol messages. See the
+[screen mapping and verification notes](STITCH-REDESIGN.md). This UI and the
+additive Feed migration are deployed on Oracle. The separate older Aria Hub
+application and its services were preserved.
 
 Branch `codex/universal-feed` adds `/feed`, seven categories, a stable mixed-content
 API, personal bookmarks/follows/preferences, source controls, official players,
 immersive video browsing and labelled isolated demo mode. Migration `0009` adds
-eight tables (49 in the new source; production remains at 41). No production
-database, OAuth settings or native posts were changed by this feature task.
+eight tables; production now has 49. Existing records and media checksums were
+preserved through the upgrade. The signed-in founder's existing Facebook
+authorization was renewed after deployment, and its three authorized Pages
+passed credential checks. Inbox synchronized real provider interactions.
 
 Real public Bluesky discovery and YouTube URL oEmbed returned HTTP 200 in read-only
 probes. mastodon.social rejected unauthenticated public timeline access with 422;
@@ -18,14 +31,12 @@ connection/publishing remains disabled; X/LinkedIn/Pinterest are link references
 
 Verification covers user/workspace boundaries, source/credential isolation, mixing,
 duplicate native posts, cursor/session limits, saves/follows/hides, rate-limit
-backoff, cache expiry and minimal saved-reference retention. Seven API browser
-cases and both demo cases passed, including existing publishing and Inbox flows.
-The 1,000-post load test recorded zero duplicates, operations tests passed 25/25,
-monitor tests passed 4/4, and production dependency audit found zero vulnerabilities.
-The complete local suite passed 232 tests, backend/shared/web type checks and
-package/API/worker/web builds passed, and lint has zero errors with the same 48
-pre-existing warnings. Linux container/migration/backup/restore CI remains a
-separate release check; Docker is unavailable on this Windows executor.
+backoff, cache expiry and minimal saved-reference retention. The deployed
+candidate passed 240 application tests, nine API browser cases, five demo browser
+cases, 29 operations cases and four monitor cases. Publishing/feed load checks,
+type checks, builds, audit and Linux container/migration/backup/restore CI passed.
+Lint has zero errors and 46 existing warnings. ARM64 runtime images were built
+on GitHub and their source, revision labels and checksums verified on Oracle.
 See [actual capabilities and setup](UNIVERSAL-FEED.md).
 
 ## Deployed release evidence
@@ -33,8 +44,9 @@ See [actual capabilities and setup](UNIVERSAL-FEED.md).
 The [29 October Feed readiness audit](FEED-PRODUCTION-VERIFICATION-2026-10-29.md)
 adds real native-player verification, concurrent source-cap enforcement, preference
 cleanup on removal, strict Bluesky moderation and a repeatable cached-feed load
-check. This candidate still requires separate deployment; production remains on
-the earlier revision above. Current test and CI evidence is attached to PR #2.
+check. Its pre-deployment disk blocker was resolved through the authorized
+SehatAI cleanup and a build outside Oracle. Current deployment and live browser
+evidence is recorded in the [Stitch deployment report](ORACLE-STITCH-DEPLOYMENT-2026-10-29.md).
 
 - API/worker/web/PostgreSQL/Caddy healthy; named tunnel and nightly backup timer active.
 - Unified Social Inbox deployed; mobile navigation scroll/dismiss/focus fix passes browser checks.
@@ -46,7 +58,7 @@ the earlier revision above. Current test and CI evidence is attached to PR #2.
 - Both missing media originals recovered by exact stored checksums. Encrypted private Drive backups downloaded, hash-verified and restored into isolated PostgreSQL.
 - Hourly encrypted Drive uploader automation active; requires the Windows computer and Codex. Oracle's nightly snapshot continues independently.
 - GitHub public monitor configured every 15 minutes; manual public probes and alert passed. Oracle component/backup monitor enabled every five minutes with all checks passing.
-- Exact deployed revision's full application/container CI passed: 187 application tests, five API browser cases, one demo case, 25 operations cases, four monitor tests, load/restore/build/audit checks. Production dependency audit is clear; 48 existing lint warnings remain.
+- The prior release passed its full application/container CI with 187 application tests. The deployed Feed/Stitch release's larger verification suite is listed above.
 
 The dated [production verification report](PRODUCTION-VERIFICATION-2026-10-28.md) records IDs, checksums, limitations and remaining public launch gates. [Operations](PRODUCTION-OPERATIONS.md) records backup and alert procedures.
 

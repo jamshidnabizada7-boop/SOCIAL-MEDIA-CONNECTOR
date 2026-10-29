@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, Maximize, Rows3 } from "lucide-react";
 import type { UniversalFeedItem } from "@aria/shared-types";
 import { Button } from "@/components/ui/button";
 import { FeedCard, type FeedCardActions } from "./feed-card";
+import { cn } from "@/lib/utils";
 
 export function VideoFeed({
   items,
@@ -16,6 +17,7 @@ export function VideoFeed({
   hasMore,
   busy,
   exit,
+  fullBleed = false,
 }: {
   items: UniversalFeedItem[];
   actions: FeedCardActions;
@@ -27,6 +29,7 @@ export function VideoFeed({
   hasMore: boolean;
   busy: boolean;
   exit: () => void;
+  fullBleed?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null),
     nodes = useRef(new Map<string, HTMLDivElement>()),
@@ -55,21 +58,21 @@ export function VideoFeed({
   function move(direction: number) {
     const next = items[index + direction];
     if (next) {
-      nodes.current
-        .get(next.id)
-        ?.scrollIntoView({
-          block: "nearest",
-          behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
-            .matches
-            ? "instant"
-            : "smooth",
-        });
+      nodes.current.get(next.id)?.scrollIntoView({
+        block: "nearest",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
+      });
     } else if (direction > 0 && hasMore && !busy) loadMore();
   }
   return (
-    <section className="min-w-0" aria-label="Immersive video browsing">
+    <section
+      className="video-experience min-w-0"
+      aria-label="Immersive video browsing"
+    >
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <p className="mr-auto text-xs text-ink-2">
+        <p className={cn("mr-auto text-xs text-ink-2", fullBleed && "sr-only")}>
           Swipe or scroll · ↑ / ↓ to browse · Native player controls
         </p>
         <Button
@@ -115,7 +118,7 @@ export function VideoFeed({
         role="region"
         tabIndex={0}
         aria-label="Video feed"
-        className="h-[76dvh] min-h-[480px] max-h-[1000px] snap-y snap-mandatory overflow-y-auto overscroll-contain rounded-2xl bg-surface-2 p-1 focus-visible:outline-2 focus-visible:outline-accent"
+        className={cn("mx-auto max-w-[650px] snap-y snap-mandatory overflow-y-auto overscroll-contain bg-[#0b0f12] p-1 focus-visible:outline-2 focus-visible:outline-accent", fullBleed ? "h-[calc(100dvh-128px-env(safe-area-inset-bottom,0px))] min-h-64" : "h-[calc(100dvh-230px)] min-h-[480px] max-h-[1000px] rounded-2xl")}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -132,7 +135,7 @@ export function VideoFeed({
               if (el) nodes.current.set(item.id, el);
               else nodes.current.delete(item.id);
             }}
-            className="h-full snap-start snap-always pb-3"
+            className="h-full snap-start snap-always"
           >
             <FeedCard
               item={item}
@@ -149,7 +152,7 @@ export function VideoFeed({
           </div>
         ))}
       </div>
-      <p className="mt-2 text-center text-xs text-ink-2">
+      <p className={cn("mt-2 text-center text-xs text-ink-2", fullBleed && "sr-only")}>
         {items.length
           ? `${index + 1} of ${items.length} loaded`
           : "No videos yet"}

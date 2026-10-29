@@ -31,6 +31,7 @@ test("demo Feed has labelled samples, working filters and persistent personal bo
   await page.getByRole("tab", { name: "Saved", exact: true }).click();
   await expect(page.locator("article[data-feed-id]")).toHaveCount(1);
   await page.getByRole("tab", { name: "For You", exact: true }).click();
+  await page.getByText("Search & filters", {exact:true}).click();
   await page.getByLabel("Filter platform").selectOption("youtube");
   await expect
     .poll(() => page.locator("article[data-feed-id]").count())

@@ -201,6 +201,34 @@ test("deployment preserves an existing external tunnel without starting another"
   assert.doesNotMatch(commands, /--profile tunnel/);
 }));
 
+for (const scenario of [
+  { name: "matching runtime images", metadata: `${"a".repeat(40)}|arm64`, expected: 0 },
+  { name: "wrong release", metadata: `${"b".repeat(40)}|arm64`, expected: 1 },
+  { name: "wrong architecture", metadata: `${"a".repeat(40)}|amd64`, expected: 1 },
+  { name: "missing provenance", metadata: "<no value>|arm64", expected: 1 },
+]) {
+  test(`prebuilt deployment validates ${scenario.name} before stopping writers`, () => fixture((ctx) => {
+    const revision = releaseFixture(ctx);
+    ctx.stub("uname", "printf 'aarch64\\n'");
+    ctx.stub("python3", "cat >/dev/null; printf 'fixture-app\\nfixture-web\\n'");
+    ctx.stub("docker", `printf "%s\\n" "$*" >> "$OPS_LOG"
+case " $* " in
+  *' image inspect '*) printf '%s\\n' "$OPS_IMAGE_METADATA";;
+esac`);
+    const result = ctx.run("deploy/apply-release.sh", [revision], { ARIA_USE_PREBUILT: "1", ARIA_TUNNEL_MODE: "external", OPS_IMAGE_METADATA: scenario.metadata });
+    assert.equal(result.status, scenario.expected, result.stderr);
+    const commands = fs.readFileSync(path.join(ctx.dir, "commands"), "utf8");
+    assert.doesNotMatch(commands, / build /);
+    if (scenario.expected) {
+      assert.doesNotMatch(commands, / stop | run |up -d/);
+      assert.equal(fs.readFileSync(path.join(ctx.dir, "REVISION"), "utf8"), "b".repeat(40) + "\n");
+    } else {
+      assert.match(commands, /run --rm --no-deps migrate/);
+      assert.equal(fs.readFileSync(path.join(ctx.dir, "REVISION"), "utf8"), revision + "\n");
+    }
+  }));
+}
+
 test("Docker cannot consume the remaining deployment script when invoked over SSH stdin", () => fixture((ctx) => {
   const revision = releaseFixture(ctx);
   ctx.stub("docker", 'printf "%s\\n" "$*" >> "$OPS_LOG"; cat > /dev/null');

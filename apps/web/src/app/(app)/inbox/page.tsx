@@ -5,6 +5,10 @@ import {
   ArrowLeft,
   ExternalLink,
   Inbox,
+  Info,
+  SlidersHorizontal,
+  MessageCircle,
+  CheckCheck,
   RefreshCw,
   Search,
   Send,
@@ -21,6 +25,7 @@ import {
 } from "@aria/shared-types";
 import { useSession, useToast } from "@/components/providers";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Avatar } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/shell/page-header";
 import { apiGet, DATA_MODE } from "@/lib/api/client";
@@ -85,16 +90,7 @@ function WorkspaceInbox({
   });
   const [search, setSearch] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  useEffect(() => {
-    const wide = window.matchMedia("(min-width: 1280px)");
-    const resize = () => setFiltersOpen(wide.matches);
-    const frame = requestAnimationFrame(resize);
-    wide.addEventListener("change", resize);
-    return () => {
-      cancelAnimationFrame(frame);
-      wide.removeEventListener("change", resize);
-    };
-  }, []);
+  const [contextOpen, setContextOpen] = useState(false);
   const [list, setList] = useState<InboxList | null>(null),
     [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<string[]>([]),
@@ -228,20 +224,23 @@ function WorkspaceInbox({
     [list],
   );
   return (
-    <div>
+    <div className="inbox-page">
       <PageHeader
         title="Social Inbox"
-        description="Conversations and activity from your connected accounts."
         actions={
           <>
+            <span className="mr-2 rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-ink">
+              {counts?.unread ?? "—"} unread
+            </span>
             <Link
               href="/notifications"
-              className="text-sm text-accent-ink underline"
+              className="hidden text-sm text-accent-ink underline sm:block"
             >
               System alerts
             </Link>
             <Button
               variant="secondary"
+              aria-label="Sync now"
               loading={busy}
               disabled={!canManage}
               onClick={() =>
@@ -251,13 +250,14 @@ function WorkspaceInbox({
                 })
               }
             >
-              <RefreshCw className="size-4" aria-hidden /> Sync now
+              <RefreshCw className="size-4" aria-hidden />
+              <span className="hidden sm:inline">Sync now</span>
             </Button>
           </>
         }
       />
       {DATA_MODE === "mock" && (
-        <p className="border-b bg-info-soft px-4 py-3 text-sm text-info-ink">
+        <p className="mb-3 bg-info-soft px-4 py-2 text-xs text-info-ink">
           Demo inbox · Sample interactions. Replies stay in this browser.
         </p>
       )}
@@ -272,156 +272,11 @@ function WorkspaceInbox({
           </Button>
         </div>
       )}
-      <div className="grid xl:min-h-[70vh] xl:grid-cols-[205px_340px_minmax(0,1fr)]">
-        <aside
-          className={cn(
-            "border-b p-4 xl:border-b-0 xl:border-r",
-            selected && "hidden xl:block",
-          )}
-          aria-label="Inbox filters"
-        >
-          <details
-            open={filtersOpen}
-            onToggle={(e) => setFiltersOpen(e.currentTarget.open)}
-            className="group"
-          >
-            <summary className="mb-3 cursor-pointer text-sm font-semibold xl:pointer-events-none">
-              Views and filters
-            </summary>
-            <nav
-              aria-label="Inbox views"
-              className="grid grid-cols-2 gap-1 xl:grid-cols-1"
-            >
-              {views.map(([value, text, key]) => (
-                <button
-                  key={value}
-                  aria-current={filters.view === value ? "page" : undefined}
-                  className={cn(
-                    "flex min-h-11 items-center justify-between rounded-lg px-3 text-left text-sm",
-                    filters.view === value
-                      ? "bg-accent-soft font-semibold text-accent-ink"
-                      : "hover:bg-surface-2",
-                  )}
-                  onClick={() => updateFilters({ view: value })}
-                >
-                  {text}
-                  {key && typeof counts?.[key] === "number" && (
-                    <span className="ml-2 text-xs tabular-nums">
-                      {counts[key] as number}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </nav>
-            <label className="mt-5 block text-xs font-semibold">
-              Interaction type
-              <select
-                aria-label="Interaction type"
-                className={`${field} mt-2`}
-                value={filters.types?.[0] || ""}
-                onChange={(e) =>
-                  updateFilters({
-                    types: e.target.value
-                      ? [e.target.value as (typeof INBOX_EVENT_TYPES)[number]]
-                      : undefined,
-                  })
-                }
-              >
-                <option value="">All enabled types</option>
-                {INBOX_EVENT_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {label(t)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="mt-4 block text-xs font-semibold">
-              Provider
-              <select
-                aria-label="Provider"
-                className={`${field} mt-2`}
-                value={filters.provider || ""}
-                onChange={(e) =>
-                  updateFilters({
-                    provider:
-                      (e.target.value as InboxFilters["provider"]) || undefined,
-                  })
-                }
-              >
-                <option value="">All providers</option>
-                {Object.values(PROVIDERS).map((p) => (
-                  <option value={p.id} key={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <fieldset className="mt-5">
-              <legend className="text-xs font-semibold">
-                Accounts · unread
-              </legend>
-              {accounts.map((a) => (
-                <label
-                  key={a.id}
-                  className="flex min-h-11 items-center gap-2 text-xs"
-                >
-                  <input
-                    type="checkbox"
-                    checked={filters.accountIds?.includes(a.id) || false}
-                    onChange={(e) =>
-                      updateFilters({
-                        accountIds: e.target.checked
-                          ? [...(filters.accountIds || []), a.id]
-                          : filters.accountIds?.filter((id) => id !== a.id),
-                      })
-                    }
-                  />
-                  <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                  {counts?.byAccount[a.id] || 0}
-                </label>
-              ))}
-              {!accounts.length && (
-                <Link href="/accounts" className="mt-2 block text-xs underline">
-                  Connect an account
-                </Link>
-              )}
-            </fieldset>
-            <label className="mt-4 block text-xs font-semibold">
-              From
-              <input
-                aria-label="From date"
-                type="date"
-                className={`${field} mt-1`}
-                onChange={(e) =>
-                  updateFilters({
-                    from: e.target.value
-                      ? `${e.target.value}T00:00:00.000Z`
-                      : undefined,
-                  })
-                }
-              />
-            </label>
-            <label className="mt-3 block text-xs font-semibold">
-              Through
-              <input
-                aria-label="Through date"
-                type="date"
-                className={`${field} mt-1`}
-                onChange={(e) =>
-                  updateFilters({
-                    to: e.target.value
-                      ? `${e.target.value}T23:59:59.999Z`
-                      : undefined,
-                  })
-                }
-              />
-            </label>
-          </details>
-        </aside>
+      <div className="inbox-grid grid items-start gap-5 px-4 pb-6 lg:px-8 xl:grid-cols-[320px_minmax(0,1fr)] 2xl:grid-cols-[350px_minmax(0,1fr)_270px]">
         <section
           aria-label="Interactions"
           className={cn(
-            "min-w-0 border-b xl:border-b-0 xl:border-r",
+            "inbox-list min-w-0 overflow-hidden rounded-2xl bg-surface shadow-[0_1px_8px_rgba(0,0,0,.025)]",
             selected && "hidden xl:block",
           )}
         >
@@ -435,15 +290,220 @@ function WorkspaceInbox({
                 type="search"
                 aria-label="Search interactions"
                 placeholder="Search people or messages"
-                className={`${field} pl-9`}
+                className={`${field} border-0 bg-surface-2 pl-9`}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </label>
+            <div
+              className="mt-3 flex gap-1 overflow-x-auto rounded-xl bg-surface-2 p-1"
+              aria-label="Quick inbox views"
+            >
+              {(
+                [
+                  ["all", "All"],
+                  ["unread", "Unread"],
+                  ["needs_reply", "Needs reply"],
+                ] as const
+              ).map(([v, title]) => (
+                <button
+                  key={v}
+                  aria-pressed={filters.view === v}
+                  onClick={() => updateFilters({ view: v })}
+                  className={cn(
+                    "min-h-11 shrink-0 rounded-lg px-3 text-xs",
+                    filters.view === v
+                      ? "bg-surface font-semibold text-accent-ink shadow-xs"
+                      : "text-ink-2",
+                  )}
+                >
+                  {title}
+                  {v === "unread" && counts ? " (" + counts.unread + ")" : ""}
+                </button>
+              ))}
+            </div>
+            <div
+              className="mt-3 flex gap-1.5 overflow-x-auto pb-1"
+              aria-label="Channel filters"
+            >
+              <button
+                onClick={() => updateFilters({ provider: undefined })}
+                aria-pressed={!filters.provider}
+                className={cn(
+                  "min-h-11 shrink-0 rounded-full px-3 text-[11px] font-semibold",
+                  !filters.provider
+                    ? "bg-accent text-on-accent"
+                    : "bg-surface-2 text-ink-2",
+                )}
+              >
+                All Channels
+              </button>
+              {[...new Set(accounts.map((a) => a.provider))].map((p) => (
+                <button
+                  key={p}
+                  aria-pressed={filters.provider === p}
+                  onClick={() => updateFilters({ provider: p })}
+                  className={cn(
+                    "flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium",
+                    filters.provider === p
+                      ? "bg-accent text-on-accent"
+                      : "bg-surface-2 text-ink-2",
+                  )}
+                >
+                  <span
+                    className="size-1.5 rounded-full"
+                    style={{ backgroundColor: PROVIDERS[p].color }}
+                  />
+                  {PROVIDERS[p].name}
+                </button>
+              ))}
+            </div>
             <p className="mt-3 text-xs text-ink-3" aria-live="polite">
               {filteredCount}
             </p>
           </div>
+          <div className="border-b px-4 pb-3" aria-label="Inbox filters">
+            <details
+              open={filtersOpen}
+              onToggle={(e) => setFiltersOpen(e.currentTarget.open)}
+              className="group"
+            >
+              <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-xs font-semibold text-ink-2">
+                <SlidersHorizontal className="size-4" aria-hidden /> Advanced
+                filters
+              </summary>
+              <nav aria-label="Inbox views" className="grid grid-cols-2 gap-1">
+                {views.map(([value, text, key]) => (
+                  <button
+                    key={value}
+                    aria-current={filters.view === value ? "page" : undefined}
+                    className={cn(
+                      "flex min-h-11 items-center justify-between rounded-lg px-3 text-left text-sm",
+                      filters.view === value
+                        ? "bg-accent-soft font-semibold text-accent-ink"
+                        : "hover:bg-surface-2",
+                    )}
+                    onClick={() => updateFilters({ view: value })}
+                  >
+                    {text}
+                    {key && typeof counts?.[key] === "number" && (
+                      <span className="ml-2 text-xs tabular-nums">
+                        {counts[key] as number}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </nav>
+              <label className="mt-5 block text-xs font-semibold">
+                Interaction type
+                <select
+                  aria-label="Interaction type"
+                  className={`${field} mt-2`}
+                  value={filters.types?.[0] || ""}
+                  onChange={(e) =>
+                    updateFilters({
+                      types: e.target.value
+                        ? [e.target.value as (typeof INBOX_EVENT_TYPES)[number]]
+                        : undefined,
+                    })
+                  }
+                >
+                  <option value="">All enabled types</option>
+                  {INBOX_EVENT_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {label(t)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="mt-4 block text-xs font-semibold">
+                Provider
+                <select
+                  aria-label="Provider"
+                  className={`${field} mt-2`}
+                  value={filters.provider || ""}
+                  onChange={(e) =>
+                    updateFilters({
+                      provider:
+                        (e.target.value as InboxFilters["provider"]) ||
+                        undefined,
+                    })
+                  }
+                >
+                  <option value="">All providers</option>
+                  {Object.values(PROVIDERS).map((p) => (
+                    <option value={p.id} key={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <fieldset className="mt-5">
+                <legend className="text-xs font-semibold">
+                  Accounts · unread
+                </legend>
+                {accounts.map((a) => (
+                  <label
+                    key={a.id}
+                    className="flex min-h-11 items-center gap-2 text-xs"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={filters.accountIds?.includes(a.id) || false}
+                      onChange={(e) =>
+                        updateFilters({
+                          accountIds: e.target.checked
+                            ? [...(filters.accountIds || []), a.id]
+                            : filters.accountIds?.filter((id) => id !== a.id),
+                        })
+                      }
+                    />
+                    <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                    {counts?.byAccount[a.id] || 0}
+                  </label>
+                ))}
+                {!accounts.length && (
+                  <Link
+                    href="/accounts"
+                    className="mt-2 block text-xs underline"
+                  >
+                    Connect an account
+                  </Link>
+                )}
+              </fieldset>
+              <label className="mt-4 block text-xs font-semibold">
+                From
+                <input
+                  aria-label="From date"
+                  type="date"
+                  className={`${field} mt-1`}
+                  onChange={(e) =>
+                    updateFilters({
+                      from: e.target.value
+                        ? `${e.target.value}T00:00:00.000Z`
+                        : undefined,
+                    })
+                  }
+                />
+              </label>
+              <label className="mt-3 block text-xs font-semibold">
+                Through
+                <input
+                  aria-label="Through date"
+                  type="date"
+                  className={`${field} mt-1`}
+                  onChange={(e) =>
+                    updateFilters({
+                      to: e.target.value
+                        ? `${e.target.value}T23:59:59.999Z`
+                        : undefined,
+                    })
+                  }
+                />
+              </label>
+            </details>
+          </div>
+
           {!!checked.length && (
             <div className="flex flex-wrap items-center gap-2 border-b bg-surface-2 p-3">
               <span className="text-xs">{checked.length} selected</span>
@@ -524,13 +584,14 @@ function WorkspaceInbox({
               </p>
             </div>
           )}
-          <ul className="divide-y">
+          <ul className="space-y-1 p-2 xl:max-h-[calc(100dvh-420px)] xl:overflow-y-auto">
             {list?.items.map((i) => (
               <li
                 key={i.id}
                 className={cn(
-                  "flex items-start gap-2 px-3",
-                  selected === i.id && "bg-accent-soft/40",
+                  "relative flex items-start gap-2 rounded-xl px-3 transition-colors hover:bg-surface-2",
+                  selected === i.id &&
+                    "bg-accent-soft/60 before:absolute before:inset-y-3 before:left-0 before:w-1 before:rounded-full before:bg-accent",
                 )}
               >
                 <input
@@ -619,7 +680,10 @@ function WorkspaceInbox({
         </section>
         <section
           aria-label="Conversation"
-          className={cn("min-w-0 p-4 lg:p-6", !selected && "hidden xl:block")}
+          className={cn(
+            "conversation-pane min-w-0 overflow-hidden rounded-2xl bg-surface p-4 lg:p-5",
+            !selected && "hidden xl:block",
+          )}
         >
           {selected && (
             <Button
@@ -658,15 +722,27 @@ function WorkspaceInbox({
           {detail && selected && (
             <>
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="font-display text-lg font-semibold">
-                    {detail.item.sender.name}
-                  </h2>
-                  <p className="mt-1 text-xs text-ink-3">
-                    {PROVIDERS[detail.item.provider].name} ·{" "}
-                    {detail.item.accountName} · {label(detail.item.type)}
-                  </p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar name={detail.item.sender.name} hue={170} size="md" />
+                  <div>
+                    <h2 className="font-display text-lg font-semibold">
+                      {detail.item.sender.name}
+                    </h2>
+                    <p className="mt-1 text-xs text-ink-3">
+                      {PROVIDERS[detail.item.provider].name} ·{" "}
+                      {detail.item.accountName} · {label(detail.item.type)}
+                    </p>
+                  </div>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Conversation details"
+                  className="min-h-11 min-w-11 2xl:hidden"
+                  onClick={() => setContextOpen(true)}
+                >
+                  <Info className="size-5" />
+                </Button>
                 {detail.item.nativeUrl && (
                   <a
                     href={detail.item.nativeUrl}
@@ -777,14 +853,15 @@ function WorkspaceInbox({
               )}
               <ol
                 aria-label="Conversation messages"
-                className="my-6 max-h-[50vh] space-y-4 overflow-y-auto pr-1"
+                className="conversation-messages my-5 max-h-[48dvh] space-y-4 overflow-y-auto rounded-xl bg-paper p-3"
               >
                 {detail.messages.map((m) => (
                   <li
                     key={m.id}
                     className={cn(
-                      "rounded-xl border p-4",
-                      m.direction === "outgoing" && "ml-5 bg-accent-soft/30",
+                      "w-fit max-w-[94%] rounded-2xl rounded-bl-sm bg-surface p-4 shadow-xs",
+                      m.direction === "outgoing" &&
+                        "ml-auto rounded-bl-2xl rounded-br-sm !bg-accent text-on-accent",
                     )}
                   >
                     <p className="flex justify-between gap-2 text-xs font-semibold">
@@ -792,7 +869,14 @@ function WorkspaceInbox({
                         {m.sender.name}
                         {m.direction === "outgoing" ? " · Sent" : ""}
                       </span>
-                      <time className="font-normal text-ink-3">
+                      <time
+                        className={cn(
+                          "font-normal",
+                          m.direction === "outgoing"
+                            ? "text-on-accent/70"
+                            : "text-ink-3",
+                        )}
+                      >
                         {timeAgo(m.occurredAt)}
                       </time>
                     </p>
@@ -902,7 +986,7 @@ function WorkspaceInbox({
                   <textarea
                     id="inbox-reply"
                     rows={4}
-                    className={`${field} mt-2 resize-y`}
+                    className={`${field} mt-2 resize-y border-0 bg-surface-2 !p-4`}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     placeholder="Write a reply…"
@@ -955,7 +1039,30 @@ function WorkspaceInbox({
             </>
           )}
         </section>
+        <aside
+          aria-label="Creator context"
+          className="hidden space-y-4 2xl:block"
+        >
+          {detail && selected ? (
+            <ConversationContext detail={detail} account={selectedAccount} />
+          ) : (
+            <div className="rounded-2xl bg-surface p-5 text-sm text-ink-2">
+              <MessageCircle className="mb-3 size-7 text-accent-ink" />
+              Conversation details appear here when you select an interaction.
+            </div>
+          )}
+        </aside>
       </div>
+      <Dialog
+        open={contextOpen && !!selected}
+        onClose={() => setContextOpen(false)}
+        title="Conversation details"
+        width="sm"
+      >
+        {detail && (
+          <ConversationContext detail={detail} account={selectedAccount} />
+        )}
+      </Dialog>
       <div className="border-t p-4 lg:px-8">
         <details>
           <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold">
@@ -1100,6 +1207,112 @@ function WorkspaceInbox({
     </div>
   );
 }
+function ConversationContext({
+  detail,
+  account,
+}: {
+  detail: InboxDetail;
+  account?: InboxAccount;
+}) {
+  const item = detail.item;
+  return (
+    <div className="space-y-4">
+      <section className="rounded-2xl bg-surface p-4 text-center shadow-xs">
+        <div className="mx-auto w-fit rounded-full bg-accent-soft p-3">
+          <Avatar name={item.sender.name} hue={170} size="lg" />
+        </div>
+        <h3 className="mt-4 font-display text-lg font-bold">
+          {item.sender.name}
+        </h3>
+        <p className="mt-1 text-xs text-ink-2">
+          {PROVIDERS[item.provider].name} · {label(item.type)}
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-studio-soft p-3">
+          <div>
+            <p className="font-display text-lg font-bold">
+              {detail.messages.length}
+            </p>
+            <p className="mt-1 text-[10px] uppercase text-ink-2">
+              Stored messages
+            </p>
+          </div>
+          <div>
+            <CheckCheck className="mx-auto size-5 text-accent-ink" />
+            <p className="mt-1 text-[10px] uppercase text-ink-2">
+              {item.resolvedAt ? "Resolved" : "Open"}
+            </p>
+          </div>
+        </div>
+        {item.nativeUrl && (
+          <a
+            href={item.nativeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-surface-2 text-xs font-medium"
+          >
+            Open on platform <ExternalLink className="size-3.5" />
+          </a>
+        )}
+      </section>
+      <section className="rounded-2xl bg-surface p-4 shadow-xs">
+        <h3 className="text-[11px] font-bold uppercase tracking-wider text-ink-2">
+          Connection & delivery
+        </h3>
+        <p className="mt-3 text-sm font-semibold">{item.accountName}</p>
+        <p className="mt-2 text-xs leading-relaxed text-ink-2">
+          {account?.capability.reason ||
+            "Provider availability is checked before replying."}
+        </p>
+        <dl className="mt-3 space-y-2 text-xs">
+          <div className="flex justify-between gap-3">
+            <dt className="text-ink-2">Sync</dt>
+            <dd className="capitalize">
+              {account?.syncStatus || "Unavailable"}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-ink-2">Last success</dt>
+            <dd>
+              {account?.lastSyncedAt
+                ? timeAgo(account.lastSyncedAt)
+                : "Not recorded"}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-ink-2">Reply</dt>
+            <dd>{item.replyAllowed ? "Available" : "On native platform"}</dd>
+          </div>
+        </dl>
+        {item.replyReason && (
+          <p className="mt-3 rounded-lg bg-studio-soft p-3 text-xs leading-relaxed text-ink-2">
+            {item.replyReason}
+          </p>
+        )}
+      </section>
+      {item.post && (
+        <section className="rounded-2xl bg-surface p-4 shadow-xs">
+          <h3 className="text-[11px] font-bold uppercase tracking-wider text-ink-2">
+            Referenced post
+          </h3>
+          <p className="mt-3 line-clamp-5 break-words text-sm leading-relaxed">
+            {item.post.text || item.post.id}
+          </p>
+          {item.post.url && (
+            <a
+              href={item.post.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-accent-ink"
+            >
+              View original <ExternalLink className="size-3" />
+            </a>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
 function Category({
   type,
   prefs,

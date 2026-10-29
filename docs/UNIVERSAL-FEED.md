@@ -1,8 +1,9 @@
 # Universal Feed
 
 Implemented in the existing app at `/feed`, alongside publishing and Social Inbox.
-This source change is not deployed on Oracle. Migration `0009` adds eight tables;
-the local schema has 49 tables while the current deployed release has 41.
+Deployed on Oracle with the Stitch UI at application revision
+`1d017e373c143256f728d82ea07f61ba6f9857fc`. Migration `0009` added eight tables;
+production now has 49. See [live deployment evidence](ORACLE-STITCH-DEPLOYMENT-2026-10-29.md).
 
 ## What works
 
@@ -154,7 +155,8 @@ subscriptions. Workspace exports do not disclose teammates' personal feed record
 
 Tables: `feed_sources`, `feed_items`, `feed_preferences`, `feed_follows`,
 `feed_saved`, `feed_interactions`, `feed_sync_state`, `feed_sessions`.
-Migration is additive and forward-only. No live database was touched.
+Migration is additive and forward-only. It was applied on Oracle under the
+operations lock after a quiesced pre-upgrade backup.
 
 ## Media and privacy
 

@@ -11,9 +11,21 @@ import { feedFixture } from "./feed-fixtures.mts";
 
 mkdirSync(".local", { recursive: true });
 const dataDir = mkdtempSync(path.resolve(".local/e2e-"));
+// CI uses native PostgreSQL. PGlite's multi-connection wire multiplexer can
+// interleave extended-protocol messages under concurrent API/worker traffic.
+// Only an explicitly named local fixture database may be supplied here.
+const nativeUrl = process.env.ARIA_E2E_DATABASE_URL;
+if (nativeUrl) {
+  const target = new URL(nativeUrl);
+  if (!['postgres:', 'postgresql:'].includes(target.protocol) ||
+      !['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname) ||
+      target.pathname !== '/ariahub_e2e') {
+    throw new Error('ARIA_E2E_DATABASE_URL must target the local ariahub_e2e fixture database.');
+  }
+}
 const env = {
   ...process.env, NODE_ENV: "development", LOG_LEVEL: "error",
-  DATABASE_URL: "postgres://aria:aria@127.0.0.1:4183/ariahub",
+  DATABASE_URL: nativeUrl || "postgres://aria:aria@127.0.0.1:4183/ariahub",
   ARIA_ENCRYPTION_KEY: "e2".repeat(32), ARIA_STORAGE_DIR: path.join(dataDir, "storage"),
   APP_BASE_URL: "http://127.0.0.1:4180", WEB_ORIGIN: "http://127.0.0.1:3180",
   HOST: "127.0.0.1", PORT: "4180", WORKER_HEALTH_PORT: "4181",
@@ -21,10 +33,10 @@ const env = {
   ARIA_ADAPTER_MODE: "real", SENTRY_DSN: "", SMTP_URL: "", STRIPE_SECRET_KEY: "",
   ARIA_FEED_FIXTURE_ORIGIN: "http://127.0.0.1:4182", YOUTUBE_DATA_API_KEY: "fixture-only-key",
 };
-const client = new PGlite(path.join(dataDir, "db"));
-const wire = new PGLiteSocketServer({ db: client, port: 4183, host: "127.0.0.1", maxConnections: 32 });
-await wire.start();
-console.log("E2E wire server ready; applying migrations");
+const client = nativeUrl ? null : new PGlite(path.join(dataDir, "db"));
+const wire = client ? new PGLiteSocketServer({ db: client, port: 4183, host: "127.0.0.1", maxConnections: 32 }) : null;
+await wire?.start();
+console.log(`E2E ${nativeUrl ? 'PostgreSQL' : 'embedded wire'} server ready; applying migrations`);
 const handle = await createDatabase({ url: env.DATABASE_URL });
 await runMigrations(handle);
 console.log("E2E migrations complete");
@@ -79,8 +91,8 @@ async function stop(code: number) {
   stopping = true;
   for (const child of children) child.kill("SIGTERM");
   fixture.close();
-  await wire.stop();
-  await client.close();
+  await wire?.stop();
+  await client?.close();
   process.exit(code);
 }
 for (const child of children) child.once("exit", (code) => { if (!stopping) void stop(code ?? 1); });

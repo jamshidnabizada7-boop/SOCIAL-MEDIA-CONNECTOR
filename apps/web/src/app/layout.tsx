@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans, Inter } from "next/font/google";
 import "./globals.css";
 import { AppProviders } from "@/components/providers";
 
-const display = Bricolage_Grotesque({
-  variable: "--font-bricolage",
+const display = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
   subsets: ["latin"],
 });
 
-const sans = Instrument_Sans({
-  variable: "--font-instrument",
+const sans = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 

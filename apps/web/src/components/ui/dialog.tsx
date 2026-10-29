@@ -26,18 +26,52 @@ export function Dialog({
   width?: "sm" | "md" | "lg";
 }) {
   const [mounted, setMounted] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  }, [onClose]);
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    if (!open || !mounted) return;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const previousOverflow = document.body.style.overflow;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close.current();
+      }
+      if (e.key !== "Tab") return;
+      const controls = Array.from(
+        panel.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]',
+        ) || [],
+      ).filter((el) => el.getClientRects().length > 0);
+      const first = controls[0],
+        last = controls[controls.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    };
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
+    panel.current
+      ?.querySelector<HTMLElement>("button, input, textarea, select, a[href]")
+      ?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
     };
-  }, [open, onClose]);
+  }, [open, mounted]);
 
   if (!mounted || !open) return null;
 
@@ -49,6 +83,7 @@ export function Dialog({
         aria-hidden
       />
       <div
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -56,13 +91,19 @@ export function Dialog({
           "pop-in relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-2xl border bg-surface shadow-pop",
           width === "sm" && "max-w-sm",
           width === "md" && "max-w-lg",
-          width === "lg" && "max-w-2xl"
+          width === "lg" && "max-w-2xl",
         )}
       >
         <div className="flex items-start justify-between gap-4 px-5 pb-1 pt-5">
           <div>
-            <h2 className="font-display text-lg font-semibold tracking-tight">{title}</h2>
-            {description && <p className="mt-1 text-sm leading-relaxed text-ink-2">{description}</p>}
+            <h2 className="font-display text-lg font-semibold tracking-tight">
+              {title}
+            </h2>
+            {description && (
+              <p className="mt-1 text-sm leading-relaxed text-ink-2">
+                {description}
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -72,11 +113,19 @@ export function Dialog({
             <X className="size-4" />
           </button>
         </div>
-        {children && <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>}
-        {footer && <div className="flex justify-end gap-2 border-t bg-surface-2 px-5 py-3.5">{footer}</div>}
+        {children && (
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            {children}
+          </div>
+        )}
+        {footer && (
+          <div className="flex justify-end gap-2 border-t bg-surface-2 px-5 py-3.5">
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }
 
@@ -112,7 +161,11 @@ export function ConfirmDialog({
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant={danger ? "danger" : "primary"} onClick={onConfirm} loading={loading}>
+          <Button
+            variant={danger ? "danger" : "primary"}
+            onClick={onConfirm}
+            loading={loading}
+          >
             {confirmLabel}
           </Button>
         </>
@@ -162,13 +215,17 @@ export function Drawer({
 
   return createPortal(
     <div className="fixed inset-0 z-[90]">
-      <div className="absolute inset-0 bg-ink/40 backdrop-blur-[2px] dark:bg-black/60" onClick={onClose} aria-hidden />
+      <div
+        className="absolute inset-0 bg-ink/40 backdrop-blur-[2px] dark:bg-black/60"
+        onClick={onClose}
+        aria-hidden
+      />
       <div
         role="dialog"
         aria-modal="true"
         className={cn(
           "absolute inset-y-0 right-0 flex w-full flex-col border-l bg-surface shadow-pop",
-          width === "md" ? "max-w-xl" : "max-w-3xl"
+          width === "md" ? "max-w-xl" : "max-w-3xl",
         )}
       >
         <div className="flex items-center justify-between gap-4 border-b px-5 py-4">
@@ -182,10 +239,14 @@ export function Drawer({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t bg-surface-2 px-5 py-3.5">{footer}</div>}
+        {footer && (
+          <div className="flex justify-end gap-2 border-t bg-surface-2 px-5 py-3.5">
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }
 
@@ -217,7 +278,8 @@ export function DropdownMenu({
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onClick);
@@ -237,7 +299,7 @@ export function DropdownMenu({
           className={cn(
             "pop-in absolute top-[calc(100%+6px)] z-50 overflow-hidden rounded-xl border bg-surface p-1 shadow-pop",
             width,
-            align === "end" ? "right-0" : "left-0"
+            align === "end" ? "right-0" : "left-0",
           )}
         >
           {items.map((item, i) => (
@@ -253,7 +315,9 @@ export function DropdownMenu({
                 className={cn(
                   "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium transition-colors",
                   "disabled:pointer-events-none disabled:opacity-50",
-                  item.danger ? "text-danger hover:bg-danger-soft" : "text-ink hover:bg-surface-2"
+                  item.danger
+                    ? "text-danger hover:bg-danger-soft"
+                    : "text-ink hover:bg-surface-2",
                 )}
               >
                 {item.icon && <span className="text-ink-2">{item.icon}</span>}
@@ -286,7 +350,8 @@ export function Popover({
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onClick);
@@ -305,7 +370,7 @@ export function Popover({
           className={cn(
             "pop-in absolute top-[calc(100%+8px)] z-50 overflow-hidden rounded-xl border bg-surface shadow-pop",
             width,
-            align === "end" ? "right-0" : "left-0"
+            align === "end" ? "right-0" : "left-0",
           )}
         >
           {children}

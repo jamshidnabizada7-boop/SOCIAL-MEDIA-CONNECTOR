@@ -4,7 +4,9 @@ set -eu
 host="${DEPLOY_HOST:-ariahub-oracle}"
 remote_dir="${DEPLOY_DIR:-/opt/ariahub-v2}"
 tunnel_mode="${ARIA_TUNNEL_MODE:-compose}"
+prebuilt="${ARIA_USE_PREBUILT:-0}"
 case "$tunnel_mode" in compose|external) ;; *) echo 'ARIA_TUNNEL_MODE must be compose or external' >&2; exit 1;; esac
+case "$prebuilt" in 0|1) ;; *) echo 'ARIA_USE_PREBUILT must be 0 or 1' >&2; exit 1;; esac
 # These values are passed to a remote shell. Restrict them instead of interpolating shell syntax.
 case "$host" in ''|-*|*[!a-zA-Z0-9_@.-]*) echo 'Unsafe DEPLOY_HOST' >&2; exit 1;; esac
 case "$remote_dir" in /opt/*) ;; *) echo 'DEPLOY_DIR must be below /opt' >&2; exit 1;; esac
@@ -19,4 +21,4 @@ git archive --format=tar --output="$archive" HEAD
 # Upload first, then lock the host for extraction/build/migration/health verification.
 ssh "$host" "mkdir -p '$remote_dir/releases'"
 scp -C "$archive" "$host:$remote_dir/releases/$revision.tar"
-ssh "$host" "cd '$remote_dir' && sudo env ARIA_TUNNEL_MODE='$tunnel_mode' sh -s -- '$revision'" < deploy/apply-release.sh
+ssh "$host" "cd '$remote_dir' && sudo env ARIA_TUNNEL_MODE='$tunnel_mode' ARIA_USE_PREBUILT='$prebuilt' sh -s -- '$revision'" < deploy/apply-release.sh

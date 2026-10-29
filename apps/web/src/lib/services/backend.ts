@@ -29,7 +29,13 @@ import type { NewPostInput, PostsService } from "@/lib/services/posts";
 import type { AccountsService } from "@/lib/services/accounts";
 import type { NotificationsService } from "@/lib/services/notifications";
 import type { WorkspaceService } from "@/lib/services/workspace";
-import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from "@/lib/api/client";
+import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  ApiError,
+} from "@/lib/api/client";
 
 /* ------------------------------- shared ---------------------------------- */
 
@@ -67,7 +73,8 @@ class Poller {
 
 /* --------------------------------- Posts --------------------------------- */
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** API variant rows use providerId and the worker's setting names. */
 interface ApiVariant {
@@ -93,13 +100,19 @@ function toApiVariants(variants: VariantOverride[] | undefined): ApiVariant[] {
 
 function fromApiVariants(rows: ApiVariant[] | undefined): VariantOverride[] {
   return (rows ?? []).map((r) => {
-    const { categoryId, ...settings } = (r.settings ?? {}) as Record<string, unknown>;
+    const { categoryId, ...settings } = (r.settings ?? {}) as Record<
+      string,
+      unknown
+    >;
     return {
       provider: r.providerId as VariantOverride["provider"],
       caption: r.caption ?? undefined,
       title: r.title ?? undefined,
       firstComment: r.firstComment ?? undefined,
-      settings: { ...(settings as VariantOverride["settings"]), ...(typeof categoryId === "string" ? { category: categoryId } : {}) },
+      settings: {
+        ...(settings as VariantOverride["settings"]),
+        ...(typeof categoryId === "string" ? { category: categoryId } : {}),
+      },
     };
   });
 }
@@ -136,12 +149,21 @@ interface ApiPostRow {
     lastError?: PublishTarget["lastError"];
   }>;
   mediaIds?: string[];
-  versions?: Array<{ version: number; frozenAt: string; caption: string; mediaIds: string[]; byUserId?: string | null }>;
+  versions?: Array<{
+    version: number;
+    frozenAt: string;
+    caption: string;
+    mediaIds: string[];
+    byUserId?: string | null;
+  }>;
   variants?: ApiVariant[];
 }
 
 class PostsPoller extends Poller {
-  constructor(private refresh: () => Promise<void>, private emitFn: () => void) {
+  constructor(
+    private refresh: () => Promise<void>,
+    private emitFn: () => void,
+  ) {
     super();
   }
   protected async tick() {
@@ -157,7 +179,7 @@ export class ApiPostsService implements PostsService {
   private cache: Post[] = [];
   private poller = new PostsPoller(
     () => this.refresh(),
-    () => this.poller.emit()
+    () => this.poller.emit(),
   );
 
   subscribe(fn: () => void): () => void {
@@ -210,7 +232,9 @@ export class ApiPostsService implements PostsService {
 
   async refresh(): Promise<void> {
     try {
-      const res = await apiGet<{ posts: ApiPostRow[] }>("/v1/workspaces/current/posts");
+      const res = await apiGet<{ posts: ApiPostRow[] }>(
+        "/v1/workspaces/current/posts",
+      );
       const previous = new Map(this.cache.map((p) => [p.id, p]));
       this.cache = res.posts.map((row) => {
         const mapped = this.mapPost(row);
@@ -219,8 +243,8 @@ export class ApiPostsService implements PostsService {
           ...mapped,
           // The list endpoint omits detail-only history/variants. Polling must
           // retain those while replacing live target state and error/link data.
-          versions: row.versions ? mapped.versions : detail?.versions ?? [],
-          variants: row.variants ? mapped.variants : detail?.variants ?? [],
+          versions: row.versions ? mapped.versions : (detail?.versions ?? []),
+          variants: row.variants ? mapped.variants : (detail?.variants ?? []),
         };
       });
     } catch {
@@ -247,7 +271,9 @@ export class ApiPostsService implements PostsService {
 
   async getDetail(id: string): Promise<Post | undefined> {
     try {
-      const res = await apiGet<{ post: ApiPostRow }>(`/v1/workspaces/current/posts/${id}`);
+      const res = await apiGet<{ post: ApiPostRow }>(
+        `/v1/workspaces/current/posts/${id}`,
+      );
       const mapped = this.mapPost(res.post);
       this.cache = [mapped, ...this.cache.filter((p) => p.id !== id)];
       return mapped;
@@ -257,26 +283,35 @@ export class ApiPostsService implements PostsService {
   }
 
   async createDraft(input: NewPostInput): Promise<Post> {
-    const res = await apiPost<{ post: ApiPostRow }>("/v1/workspaces/current/posts", {
-      title: input.title,
-      caption: input.caption,
-      // An empty link string would fail the API's URL validation.
-      link: input.link || undefined,
-      // Demo/mock brand ids aren't UUIDs; the API only accepts real ones.
-      brandId: input.brandId && UUID_RE.test(input.brandId) ? input.brandId : undefined,
-      campaign: input.campaign,
-      labels: input.labels ?? [],
-      accountIds: input.selectedAccountIds,
-      mediaIds: input.mediaIds ?? [],
-      variants: toApiVariants(input.variants),
-      aiDisclosed: input.aiDisclosed ?? false,
-    });
+    const res = await apiPost<{ post: ApiPostRow }>(
+      "/v1/workspaces/current/posts",
+      {
+        title: input.title,
+        caption: input.caption,
+        // An empty link string would fail the API's URL validation.
+        link: input.link || undefined,
+        // Demo/mock brand ids aren't UUIDs; the API only accepts real ones.
+        brandId:
+          input.brandId && UUID_RE.test(input.brandId)
+            ? input.brandId
+            : undefined,
+        campaign: input.campaign,
+        labels: input.labels ?? [],
+        accountIds: input.selectedAccountIds,
+        mediaIds: input.mediaIds ?? [],
+        variants: toApiVariants(input.variants),
+        aiDisclosed: input.aiDisclosed ?? false,
+      },
+    );
     const mapped = this.mapPost(res.post);
     this.cache = [mapped, ...this.cache];
     return mapped;
   }
 
-  async updateDraft(id: string, patch: Partial<Post> & { selectedAccountIds?: string[] }): Promise<Post> {
+  async updateDraft(
+    id: string,
+    patch: Partial<Post> & { selectedAccountIds?: string[] },
+  ): Promise<Post> {
     const body: Record<string, unknown> = {};
     if (patch.title !== undefined) body.title = patch.title;
     if (patch.caption !== undefined) body.caption = patch.caption;
@@ -284,10 +319,15 @@ export class ApiPostsService implements PostsService {
     if (patch.campaign !== undefined) body.campaign = patch.campaign;
     if (patch.labels !== undefined) body.labels = patch.labels;
     if (patch.mediaIds !== undefined) body.mediaIds = patch.mediaIds;
-    if (patch.variants !== undefined) body.variants = toApiVariants(patch.variants);
+    if (patch.variants !== undefined)
+      body.variants = toApiVariants(patch.variants);
     if (patch.aiDisclosed !== undefined) body.aiDisclosed = patch.aiDisclosed;
-    if (patch.selectedAccountIds !== undefined) body.accountIds = patch.selectedAccountIds;
-    const res = await apiPatch<{ post: ApiPostRow }>(`/v1/workspaces/current/posts/${id}`, body);
+    if (patch.selectedAccountIds !== undefined)
+      body.accountIds = patch.selectedAccountIds;
+    const res = await apiPatch<{ post: ApiPostRow }>(
+      `/v1/workspaces/current/posts/${id}`,
+      body,
+    );
     const mapped = this.mapPost(res.post);
     this.cache = [mapped, ...this.cache.filter((p) => p.id !== id)];
     return mapped;
@@ -321,7 +361,9 @@ export class ApiPostsService implements PostsService {
   }
 
   async schedule(id: string, whenIso: string): Promise<void> {
-    await apiPost(`/v1/workspaces/current/posts/${id}/schedule`, { scheduledAt: whenIso });
+    await apiPost(`/v1/workspaces/current/posts/${id}/schedule`, {
+      scheduledAt: whenIso,
+    });
     await this.refresh();
   }
 
@@ -336,7 +378,9 @@ export class ApiPostsService implements PostsService {
   }
 
   async retryTarget(postId: string, targetId: string): Promise<void> {
-    await apiPost(`/v1/workspaces/current/posts/${postId}/targets/${targetId}/retry`);
+    await apiPost(
+      `/v1/workspaces/current/posts/${postId}/targets/${targetId}/retry`,
+    );
     await this.refresh();
   }
 
@@ -367,7 +411,10 @@ interface ApiAccountRow {
 }
 
 class AccountsPoller extends Poller {
-  constructor(private refresh: () => Promise<void>, private emitFn: () => void) {
+  constructor(
+    private refresh: () => Promise<void>,
+    private emitFn: () => void,
+  ) {
     super();
   }
   protected async tick() {
@@ -383,7 +430,7 @@ export class ApiAccountsService implements AccountsService {
   private cache: SocialAccount[] = [];
   private poller = new AccountsPoller(
     () => this.refreshCache(),
-    () => this.poller.emit()
+    () => this.poller.emit(),
   );
 
   subscribe(fn: () => void): () => void {
@@ -397,7 +444,9 @@ export class ApiAccountsService implements AccountsService {
       brandId: row.brandId ?? "",
       displayName: row.displayName,
       handle: row.handle,
-      avatarHue: Math.floor([...row.id].reduce((a, c) => a + c.charCodeAt(0), 0) % 360),
+      avatarHue: Math.floor(
+        [...row.id].reduce((a, c) => a + c.charCodeAt(0), 0) % 360,
+      ),
       connection: row.connection,
       connectionNote: row.connectionNote ?? undefined,
       followers: row.followers ?? 0,
@@ -409,7 +458,9 @@ export class ApiAccountsService implements AccountsService {
 
   async refreshCache(): Promise<void> {
     try {
-      const res = await apiGet<{ accounts: ApiAccountRow[] }>("/v1/workspaces/current/accounts");
+      const res = await apiGet<{ accounts: ApiAccountRow[] }>(
+        "/v1/workspaces/current/accounts",
+      );
       this.cache = res.accounts.map((a) => this.map(a));
     } catch {
       /* keep last good cache */
@@ -436,10 +487,14 @@ export class ApiAccountsService implements AccountsService {
    */
   async connect(provider: SocialAccount["provider"]): Promise<SocialAccount> {
     if (provider === "bluesky" || provider === "mastodon") {
-      throw new ApiError(400, "use_dedicated_flow", "Use the dedicated connect form for this provider.");
+      throw new ApiError(
+        400,
+        "use_dedicated_flow",
+        "Use the dedicated connect form for this provider.",
+      );
     }
     const res = await apiGet<{ url: string }>(
-      `/v1/oauth/${provider}/authorize?workspaceId=current&format=json`
+      `/v1/oauth/${provider}/authorize?workspaceId=current&format=json`,
     );
     window.location.href = res.url;
     return new Promise<SocialAccount>(() => {}); // navigation continues the flow
@@ -447,7 +502,12 @@ export class ApiAccountsService implements AccountsService {
 
   async reconnect(id: string): Promise<SocialAccount> {
     const account = this.cache.find((a) => a.id === id);
-    if (!account) throw new ApiError(404, "not_found", "Account not found. Refresh the page and try again.");
+    if (!account)
+      throw new ApiError(
+        404,
+        "not_found",
+        "Account not found. Refresh the page and try again.",
+      );
     return this.connect(account.provider);
   }
 
@@ -478,7 +538,10 @@ interface ApiNotificationRow {
 }
 
 class NotificationsPoller extends Poller {
-  constructor(private refresh: () => Promise<void>, private emitFn: () => void) {
+  constructor(
+    private refresh: () => Promise<void>,
+    private emitFn: () => void,
+  ) {
     super();
   }
   protected async tick() {
@@ -494,7 +557,7 @@ export class ApiNotificationsService implements NotificationsService {
   private cache: Notification[] = [];
   private poller = new NotificationsPoller(
     () => this.refresh(),
-    () => this.poller.emit()
+    () => this.poller.emit(),
   );
 
   subscribe(fn: () => void): () => void {
@@ -518,7 +581,7 @@ export class ApiNotificationsService implements NotificationsService {
   async refresh(): Promise<void> {
     try {
       const res = await apiGet<{ notifications: ApiNotificationRow[] }>(
-        "/v1/workspaces/current/notifications"
+        "/v1/workspaces/current/notifications",
       );
       this.cache = res.notifications.map((n) => this.map(n));
     } catch {
@@ -541,7 +604,9 @@ export class ApiNotificationsService implements NotificationsService {
 
   markRead(id: string): void {
     void apiPost(`/v1/workspaces/current/notifications/${id}/read`);
-    this.cache = this.cache.map((n) => (n.id === id ? { ...n, read: true } : n));
+    this.cache = this.cache.map((n) =>
+      n.id === id ? { ...n, read: true } : n,
+    );
   }
 
   markAllRead(): void {
@@ -611,8 +676,15 @@ export class ApiWorkspaceService implements WorkspaceService {
   }
 
   async refreshWorkspaces(): Promise<Workspace[]> {
-    const res = await apiGet<{ workspaces: ApiWorkspaceSummary[] }>("/v1/workspaces");
-    this.cache = res.workspaces;
+    // /auth/me uses workspaceId; the workspace-list endpoint returns id.
+    type WorkspaceRow =
+      | ApiWorkspaceSummary
+      | (Omit<ApiWorkspaceSummary, "workspaceId"> & { id: string });
+    const res = await apiGet<{ workspaces: WorkspaceRow[] }>("/v1/workspaces");
+    this.cache = res.workspaces.map((row) => ({
+      ...row,
+      workspaceId: "workspaceId" in row ? row.workspaceId : row.id,
+    }));
     this.emit();
     return this.workspaces();
   }
@@ -622,24 +694,39 @@ export class ApiWorkspaceService implements WorkspaceService {
   }
 
   async getDetail(id: string): Promise<Workspace | undefined> {
-    await this.refreshWorkspaces();
+    try {
+      await this.refreshWorkspaces();
+    } catch {
+      return undefined;
+    }
     const summary = this.cache.find((w) => w.workspaceId === id);
     if (!summary) return undefined;
     try {
-      const res = await apiGet<{ workspace: Workspace; brands: Brand[] }>(`/v1/workspaces/${id}`);
+      const res = await apiGet<{ workspace: Workspace; brands: Brand[] }>(
+        `/v1/workspaces/${id}`,
+      );
       return { ...this.mapSummary(summary), brands: res.brands };
     } catch {
       return this.mapSummary(summary);
     }
   }
 
-  async updateWorkspace(id: string, patch: Partial<Pick<Workspace, "name" | "timezone" | "locale">>): Promise<void> {
+  async updateWorkspace(
+    id: string,
+    patch: Partial<Pick<Workspace, "name" | "timezone" | "locale">>,
+  ): Promise<void> {
     await apiPatch(`/v1/workspaces/${id}`, patch);
     await this.refreshWorkspaces();
   }
 
-  async addBrand(workspaceId: string, brand: { name: string; description?: string }): Promise<Brand> {
-    const res = await apiPost<{ brand: Brand }>(`/v1/workspaces/${workspaceId}/brands`, brand);
+  async addBrand(
+    workspaceId: string,
+    brand: { name: string; description?: string },
+  ): Promise<Brand> {
+    const res = await apiPost<{ brand: Brand }>(
+      `/v1/workspaces/${workspaceId}/brands`,
+      brand,
+    );
     return res.brand;
   }
 
@@ -657,7 +744,9 @@ export class ApiWorkspaceService implements WorkspaceService {
 
   async membersAsync(): Promise<User[]> {
     try {
-      const res = await apiGet<{ members: ApiMemberRow[] }>("/v1/workspaces/current/members");
+      const res = await apiGet<{ members: ApiMemberRow[] }>(
+        "/v1/workspaces/current/members",
+      );
       this.memberCache = res.members.map((m) => ({
         id: m.userId,
         name: m.name,
@@ -665,7 +754,9 @@ export class ApiWorkspaceService implements WorkspaceService {
         avatarHue: m.avatarHue ?? 200,
         role: m.role as User["role"],
         lastActiveAt: m.lastActiveAt ?? new Date().toISOString(),
-        status: (m.memberStatus === "invited" ? "invited" : "active") as User["status"],
+        status: (m.memberStatus === "invited"
+          ? "invited"
+          : "active") as User["status"],
       }));
       this.emit();
       return this.memberCache;
@@ -692,19 +783,35 @@ export class ApiWorkspaceService implements WorkspaceService {
   // Live billing is asynchronous: callers must use fetchWorkspaceBilling.
   // Never substitute demo subscriptions or invoices when the request fails.
   subscription(): Subscription {
-    throw new ApiError(503, "billing_not_loaded", "Billing data hasn't loaded. Please try again.");
+    throw new ApiError(
+      503,
+      "billing_not_loaded",
+      "Billing data hasn't loaded. Please try again.",
+    );
   }
 
   usage(): Usage {
-    throw new ApiError(503, "billing_not_loaded", "Usage data hasn't loaded. Please try again.");
+    throw new ApiError(
+      503,
+      "billing_not_loaded",
+      "Usage data hasn't loaded. Please try again.",
+    );
   }
 
   invoices(): Invoice[] {
-    throw new ApiError(503, "billing_not_loaded", "Invoices haven't loaded. Please try again.");
+    throw new ApiError(
+      503,
+      "billing_not_loaded",
+      "Invoices haven't loaded. Please try again.",
+    );
   }
 
   async changePlan(_plan: unknown): Promise<void> {
-    throw new ApiError(501, "billing_not_wired", "Payments arrive with the production phase.");
+    throw new ApiError(
+      501,
+      "billing_not_wired",
+      "Payments arrive with the production phase.",
+    );
   }
 
   plans(): Plan[] {

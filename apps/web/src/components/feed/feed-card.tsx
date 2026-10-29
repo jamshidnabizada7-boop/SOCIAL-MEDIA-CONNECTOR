@@ -164,8 +164,8 @@ export function FeedPlayer({
               src={item.thumbnailUrl}
               alt={`Video preview from ${item.authorName}`}
               className={cn(
-                "w-full object-contain",
-                immersive ? "max-h-full" : "max-h-[500px]",
+                "w-full",
+                immersive ? "h-full max-h-full object-cover" : "max-h-[500px] object-contain",
               )}
             />
           ) : (
@@ -216,6 +216,7 @@ export function FeedCard({
   onClose,
   immersive = false,
   busy = false,
+  compact = false,
 }: {
   item: UniversalFeedItem;
   actions: FeedCardActions;
@@ -225,6 +226,7 @@ export function FeedCard({
   onClose: () => void;
   immersive?: boolean;
   busy?: boolean;
+  compact?: boolean;
 }) {
   const [menu, setMenu] = useState(false),
     [expanded, setExpanded] = useState(false);
@@ -240,16 +242,33 @@ export function FeedCard({
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [menu]);
+  if (immersive)
+    return (
+      <ImmersiveFeedCard
+        item={item}
+        actions={actions}
+        active={active}
+        allowPlayer={allowPlayer}
+        onActivate={onActivate}
+        onClose={onClose}
+      />
+    );
   return (
     <article
       aria-label={`${provider.name} post by ${item.authorName}`}
       data-feed-id={item.id}
       className={cn(
-        "overflow-hidden rounded-2xl border bg-surface shadow-xs",
-        immersive ? "flex h-full min-h-0 flex-col" : "",
+        "feed-card relative overflow-hidden rounded-2xl bg-surface shadow-[0_2px_12px_rgba(20,27,43,.04)]",
+        immersive ? "immersive-card flex h-full min-h-0 flex-col" : "",
+        compact && "explore-card mb-3 break-inside-avoid border",
       )}
     >
-      <header className="flex shrink-0 items-center gap-3 p-4">
+      <header
+        className={cn(
+          "flex shrink-0 items-center gap-3 p-4",
+          compact && "!gap-2 !p-3",
+        )}
+      >
         {item.authorAvatarUrl ? (
           <FeedImage
             src={item.authorAvatarUrl}
@@ -283,7 +302,12 @@ export function FeedCard({
             )}
           </p>
         </div>
-        <span className="shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium">
+        <span
+          className={cn(
+            "shrink-0 rounded-full bg-studio-soft px-2.5 py-1 text-[11px] font-medium",
+            compact && "hidden",
+          )}
+        >
           {provider.name}
         </span>
         <div
@@ -396,12 +420,14 @@ export function FeedCard({
         </div>
       ) : null}
       <div className={cn("shrink-0 px-4 pb-4", item.caption ? "pt-4" : "pt-1")}>
+        {compact && <p className="mb-2 truncate text-xs font-semibold">{item.authorName}</p>}
         {item.caption ? (
           <>
             <p
               className={cn(
                 "whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink-2",
-                !expanded && (immersive ? "line-clamp-2" : "line-clamp-6"),
+                !expanded &&
+                  (immersive || compact ? "line-clamp-2" : "line-clamp-6"),
               )}
             >
               {item.caption}
@@ -462,13 +488,14 @@ export function FeedCard({
               onClick={() => actions.follow(item)}
               disabled={busy}
               aria-pressed={!!item.following}
+              aria-label={item.following ? "Following" : "Follow in Aria Hub"}
             >
               {item.following ? (
                 <Check className="size-4" aria-hidden />
               ) : (
                 <UserPlus className="size-4" aria-hidden />
               )}
-              {item.following ? "Following" : "Follow in Aria Hub"}
+              {item.following ? "Following" : compact ? "Follow" : "Follow in Aria Hub"}
             </Button>
           ) : null}
           {!item.sample ? (
@@ -494,6 +521,121 @@ export function FeedCard({
             </>
           ) : null}
         </div>
+      </div>
+    </article>
+  );
+}
+
+function ImmersiveFeedCard({
+  item,
+  actions,
+  active,
+  allowPlayer,
+  onActivate,
+  onClose,
+}: {
+  item: UniversalFeedItem;
+  actions: FeedCardActions;
+  active: boolean;
+  allowPlayer: boolean;
+  onActivate: () => void;
+  onClose: () => void;
+}) {
+  const provider = PROVIDERS[item.provider];
+  return (
+    <article
+      data-feed-id={item.id}
+      aria-label={`${provider.name} video by ${item.authorName}`}
+      className="immersive-card relative flex h-full min-h-0 overflow-hidden rounded-2xl bg-[#0b0f12] text-white"
+    >
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex h-12 shrink-0 items-center gap-2 px-4 text-xs">
+          <span
+            className="size-2 rounded-full"
+            style={{ backgroundColor: provider.color }}
+          />
+          <span className="font-semibold">{provider.name}</span>
+          <span className="ml-auto text-white/60">
+            {item.sample ? "Sample video" : "Official player"}
+          </span>
+        </div>
+        <div className="relative min-h-0 flex-1">
+          <FeedPlayer
+            item={item}
+            active={active}
+            allowed={allowPlayer}
+            onActivate={onActivate}
+            onClose={onClose}
+            immersive
+          />
+        </div>
+        <div className="shrink-0 bg-linear-to-t from-black/80 to-transparent p-4">
+          <p className="text-sm font-bold">
+            {item.authorHandle || item.authorName}
+          </p>
+          <p className="mt-1 line-clamp-2 break-words text-sm leading-relaxed text-white/80">
+            {item.caption}
+          </p>
+          {item.likeCount !== null && (
+            <p className="mt-2 text-[11px] text-white/60">
+              {item.likeCount.toLocaleString()} likes on {provider.name}
+            </p>
+          )}
+        </div>
+      </div>
+      <div
+        className="flex w-16 shrink-0 flex-col items-center justify-end gap-3 bg-black/15 px-1 pb-7"
+        aria-label="Video actions"
+      >
+        {item.availability !== "preview_only" && (
+          <button
+            onClick={() => actions.follow(item)}
+            aria-label={
+              item.following ? "Unfollow in Aria Hub" : "Follow in Aria Hub"
+            }
+            aria-pressed={!!item.following}
+            className="flex min-h-12 w-full flex-col items-center justify-center gap-1 text-[10px]"
+          >
+            <span className="grid size-10 place-items-center rounded-full border border-white/60 bg-white/10">
+              {item.following ? (
+                <Check className="size-5" />
+              ) : (
+                <UserPlus className="size-5" />
+              )}
+            </span>
+            {item.following ? "Following" : "Follow"}
+          </button>
+        )}
+        <button
+          onClick={() => actions.save(item)}
+          aria-pressed={!!item.saved}
+          className="flex min-h-12 w-full flex-col items-center justify-center gap-1 text-[10px]"
+        >
+          <Bookmark
+            className="size-7"
+            fill={item.saved ? "currentColor" : "none"}
+          />
+          {item.saved ? "Saved" : "Save"}
+        </button>
+        <button
+          onClick={() => actions.share(item)}
+          className="flex min-h-12 w-full flex-col items-center justify-center gap-1 text-[10px]"
+        >
+          <Share2 className="size-7" />
+          Share
+        </button>
+        {!item.sample && (
+          <a
+            href={item.originalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex min-h-12 w-full flex-col items-center justify-center gap-1 text-[10px]"
+            aria-label={`Open original on ${provider.name}`}
+          >
+            <ExternalLink className="size-6 text-emerald-300" />
+            Original
+          </a>
+        )}
       </div>
     </article>
   );
