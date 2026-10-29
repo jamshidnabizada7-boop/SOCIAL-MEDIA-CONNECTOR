@@ -75,6 +75,10 @@ rendered 12 collected posts, and the video screen listed nine real Bluesky
 videos. Composer displayed the three authorized Page targets and kept publishing
 disabled for an empty post. These checks used the user's normal signed-in
 production session, with no demo banner or fixture substitution.
+This live check confirmed official iframe creation and a directly rendered
+provider embed, but did not establish in-frame native playback in the current
+Edge session. The earlier separate native-playback evidence remains in the
+Feed audit; provider playback availability is not guaranteed by this deployment.
 
 The desktop Inbox used the production Inter and Plus Jakarta Sans fonts without
 a demo banner. At 390px, the conversation details panel fit the screen, trapped
