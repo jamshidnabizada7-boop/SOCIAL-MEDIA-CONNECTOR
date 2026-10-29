@@ -96,7 +96,9 @@ test("universal search finds accounts and content, filters without more calls an
   await page
     .getByRole("button", { name: "Refresh results", exact: true })
     .click();
-  await expect(page.getByRole("alert")).toContainText("Search fixture outage");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Search fixture outage" }),
+  ).toBeVisible();
   await expect(people).toHaveCount(0);
   await expect(page.getByText(/Demo search/)).toHaveCount(0);
   expect(errors).toEqual([]);

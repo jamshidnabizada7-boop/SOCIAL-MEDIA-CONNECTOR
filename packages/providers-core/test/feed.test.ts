@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_FEED_PREFERENCES,
   isOfficialFeedEmbed,
+  isOfficialBlueskyVideo,
   mixFeed,
   type UniversalFeedItem,
 } from "@aria/shared-types";
@@ -29,6 +30,8 @@ const post = (n = 1) => ({
   replyCount: undefined,
   embed: {
     $type: "app.bsky.embed.video#view",
+    playlist:
+      "https://video.bsky.app/watch/did%3Aplc%3Acreator/fixturevideo/playlist.m3u8",
     thumbnail: "https://video.bsky.app/thumb.jpg",
   },
 });
@@ -45,6 +48,99 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 describe("real feed adapters and safe metadata", () => {
+  it("exposes only the public Bluesky playlist belonging to the post's author", async () => {
+    const p = post();
+    const result = await retrieveFeed({
+      provider: "bluesky",
+      kind: "public",
+      config: {},
+      fetchImpl: async () =>
+        json({
+          feed: [
+            { post: p },
+            {
+              post: {
+                ...post(2),
+                embed: {
+                  ...p.embed,
+                  playlist:
+                    "https://video.bsky.app/watch/did%3Aplc%3Aanother/fixturevideo/playlist.m3u8",
+                },
+              },
+            },
+          ],
+        }),
+    });
+    expect(result[0].playbackUrl).toBe(p.embed.playlist);
+    expect(result[1].playbackUrl).toBeUndefined();
+    for (const url of [
+      "https://evil.example/playlist.m3u8",
+      "https://video.bsky.app.evil.example/watch/did%3Aplc%3Acreator/fixturevideo/playlist.m3u8",
+      "https://video.bsky.app/watch/did%3Aplc%3Acreator/fixturevideo/playlist.m3u8?token=private",
+      "http://video.bsky.app/watch/did%3Aplc%3Acreator/fixturevideo/playlist.m3u8",
+    ])
+      expect(isOfficialBlueskyVideo(url)).toBe(false);
+  });
+  it("keeps Facebook photos, album images, link previews and video embeds from authorized Page metadata", async () => {
+    const call = vi.fn(async (_url: string) =>
+      json({
+        data: [
+          {
+            id: "1",
+            message: "Photo",
+            permalink_url: "https://www.facebook.com/owner/posts/1",
+            full_picture: "https://cdn.example/photo.jpg",
+          },
+          {
+            id: "2",
+            message: "Album",
+            permalink_url: "https://www.facebook.com/owner/posts/2",
+            attachments: {
+              data: [
+                {
+                  media_type: "album",
+                  subattachments: {
+                    data: [
+                      {
+                        media: { image: { src: "https://cdn.example/a.jpg" } },
+                      },
+                      {
+                        media: { image: { src: "https://cdn.example/b.jpg" } },
+                      },
+                      { media: { image: { src: "http://127.0.0.1/private" } } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            id: "3",
+            permalink_url: "https://www.facebook.com/reel/123456789/",
+            full_picture: "https://cdn.example/video.jpg",
+            attachments: {
+              data: [{ media_type: "video", type: "video_inline" }],
+            },
+          },
+        ],
+      }),
+    );
+    const rows = await retrieveFeed({
+      provider: "facebook",
+      kind: "account",
+      config: {},
+      account,
+      accessToken: "fixture",
+      fetchImpl: call,
+    });
+    expect(rows[0].images).toEqual([{ url: "https://cdn.example/photo.jpg" }]);
+    expect(rows[1].contentType).toBe("carousel");
+    expect(rows[1].images).toHaveLength(2);
+    expect(rows[2].contentType).toBe("video");
+    expect(isOfficialFeedEmbed("facebook", rows[2].embedUrl)).toBe(true);
+    expect(JSON.stringify(rows)).not.toContain("fixture");
+    expect(String(call.mock.calls[0]?.[0])).toContain("attachments");
+  });
   it.each([
     "!hide",
     "!warn",

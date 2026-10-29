@@ -83,6 +83,7 @@ const preferencesInput = z
     reducedSourceIds: z.array(z.string().uuid()).max(100),
     showSensitive: z.boolean(),
     allowEmbeds: z.boolean(),
+    autoplayVideos: z.boolean().optional(),
   })
   .strict();
 const itemInput = z.object({ itemId: z.string().uuid() }).strict();
@@ -671,6 +672,7 @@ export function registerFeedRoutes(app: FastifyInstance): void {
             thumbnailUrl: undefined,
             authorAvatarUrl: undefined,
             embedUrl: undefined,
+            playbackUrl: undefined,
             canEmbed: false,
             availability: "unavailable" as const,
             likeCount: null,

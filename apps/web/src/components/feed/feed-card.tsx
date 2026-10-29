@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Provider images stay on their original hosts; Next's image proxy must not rehost them. */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   Bookmark,
   Check,
@@ -19,10 +19,12 @@ import {
 import {
   PROVIDERS,
   isOfficialFeedEmbed,
+  isOfficialBlueskyVideo,
   type UniversalFeedItem,
 } from "@aria/shared-types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { BlueskyVideo } from "./bluesky-video";
 
 export interface FeedCardActions {
   save: (item: UniversalFeedItem) => void;
@@ -73,6 +75,7 @@ export function FeedPlayer({
   onActivate,
   onClose,
   immersive = false,
+  autoPlay = true,
 }: {
   item: UniversalFeedItem;
   active: boolean;
@@ -80,22 +83,50 @@ export function FeedPlayer({
   onActivate: () => void;
   onClose: () => void;
   immersive?: boolean;
+  autoPlay?: boolean;
 }) {
   const node = useRef<HTMLDivElement>(null),
     [visible, setVisible] = useState(false),
+    [inView, setInView] = useState(false),
     [closed, setClosed] = useState(false);
+  const direct =
+    item.provider === "bluesky" &&
+    !item.sample &&
+    isOfficialBlueskyVideo(item.playbackUrl, item.authorId);
+  const autoActivate = useEffectEvent((entry: IntersectionObserverEntry) => {
+    const showing = entry.isIntersecting && entry.intersectionRatio >= 0.6;
+    setVisible(entry.isIntersecting);
+    setInView(showing);
+    const saveData = (
+      navigator as Navigator & { connection?: { saveData?: boolean } }
+    ).connection?.saveData;
+    if (
+      showing &&
+      !closed &&
+      autoPlay &&
+      !item.sample &&
+      (direct || (item.provider === "facebook" && item.canEmbed)) &&
+      !saveData &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+      document.visibilityState === "visible"
+    )
+      onActivate();
+  });
   useEffect(() => {
     const el = node.current;
     if (!el) return;
     const observer = new IntersectionObserver(
-      (entries) => setVisible(entries.some((e) => e.isIntersecting)),
-      { rootMargin: "100px" },
+      (entries) => {
+        for (const entry of entries) autoActivate(entry);
+      },
+      { threshold: [0, 0.6] },
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [direct, autoPlay]);
   const valid =
-      item.canEmbed && isOfficialFeedEmbed(item.provider, item.embedUrl),
+      direct ||
+      (item.canEmbed && isOfficialFeedEmbed(item.provider, item.embedUrl)),
     load = active && allowed && visible && valid && !closed;
   const provider = PROVIDERS[item.provider].name;
   const url = load ? new URL(item.embedUrl!) : null;
@@ -106,6 +137,10 @@ export function FeedPlayer({
   if (url && item.provider === "tiktok") {
     url.searchParams.set("controls", "1");
     url.searchParams.set("autoplay", "0");
+  }
+  if (url && item.provider === "facebook") {
+    url.searchParams.set("autoplay", "true");
+    url.searchParams.set("mute", "true");
   }
   return (
     <div
@@ -118,7 +153,17 @@ export function FeedPlayer({
         !immersive && item.provider === "youtube" ? "aspect-video" : "",
       )}
     >
-      {load ? (
+      {load && direct ? (
+        <BlueskyVideo
+          key={item.playbackUrl}
+          url={item.playbackUrl!}
+          poster={item.thumbnailUrl}
+          author={item.authorName}
+          playing={active && inView}
+          onActivate={onActivate}
+          immersive={immersive}
+        />
+      ) : load ? (
         <div
           className={cn(
             "relative flex w-full flex-col",
@@ -165,7 +210,9 @@ export function FeedPlayer({
               alt={`Video preview from ${item.authorName}`}
               className={cn(
                 "w-full",
-                immersive ? "h-full max-h-full object-cover" : "max-h-[500px] object-contain",
+                immersive
+                  ? "h-full max-h-full object-cover"
+                  : "max-h-[500px] object-contain",
               )}
             />
           ) : (
@@ -184,7 +231,7 @@ export function FeedPlayer({
                 className="shadow-lg"
               >
                 <Play className="size-4" aria-hidden />
-                Load {provider} player
+                {direct ? "Play video" : `Load ${provider} player`}
               </Button>
             ) : !item.sample ? (
               <a
@@ -217,6 +264,7 @@ export function FeedCard({
   immersive = false,
   busy = false,
   compact = false,
+  autoPlay = true,
 }: {
   item: UniversalFeedItem;
   actions: FeedCardActions;
@@ -227,6 +275,7 @@ export function FeedCard({
   immersive?: boolean;
   busy?: boolean;
   compact?: boolean;
+  autoPlay?: boolean;
 }) {
   const [menu, setMenu] = useState(false),
     [expanded, setExpanded] = useState(false);
@@ -251,6 +300,7 @@ export function FeedCard({
         allowPlayer={allowPlayer}
         onActivate={onActivate}
         onClose={onClose}
+        autoPlay={autoPlay}
       />
     );
   return (
@@ -309,6 +359,9 @@ export function FeedCard({
           )}
         >
           {provider.name}
+          {item.provider === "facebook" && item.sourceType === "account"
+            ? " · Your Page"
+            : ""}
         </span>
         <div
           className="relative"
@@ -400,27 +453,34 @@ export function FeedCard({
             onActivate={onActivate}
             onClose={onClose}
             immersive={immersive}
+            autoPlay={autoPlay}
           />
         </div>
-      ) : item.images.length ? (
+      ) : item.images.length || item.thumbnailUrl ? (
         <div
           className={cn(
             "grid gap-1",
             item.images.length > 1 ? "grid-cols-2" : "grid-cols-1",
           )}
         >
-          {item.images.slice(0, 4).map((image, index) => (
-            <FeedImage
-              key={`${image.url}:${index}`}
-              src={image.url}
-              alt={image.alt || `Image ${index + 1} from ${item.authorName}`}
-              className="max-h-[520px] w-full bg-surface-2 object-contain"
-            />
-          ))}
+          {(item.images.length ? item.images : [{ url: item.thumbnailUrl! }])
+            .slice(0, 4)
+            .map((image, index) => (
+              <FeedImage
+                key={`${image.url}:${index}`}
+                src={image.url}
+                alt={image.alt || `Image ${index + 1} from ${item.authorName}`}
+                className="max-h-[520px] w-full bg-surface-2 object-contain"
+              />
+            ))}
         </div>
       ) : null}
       <div className={cn("shrink-0 px-4 pb-4", item.caption ? "pt-4" : "pt-1")}>
-        {compact && <p className="mb-2 truncate text-xs font-semibold">{item.authorName}</p>}
+        {compact && (
+          <p className="mb-2 truncate text-xs font-semibold">
+            {item.authorName}
+          </p>
+        )}
         {item.caption ? (
           <>
             <p
@@ -495,7 +555,11 @@ export function FeedCard({
               ) : (
                 <UserPlus className="size-4" aria-hidden />
               )}
-              {item.following ? "Following" : compact ? "Follow" : "Follow in Aria Hub"}
+              {item.following
+                ? "Following"
+                : compact
+                  ? "Follow"
+                  : "Follow in Aria Hub"}
             </Button>
           ) : null}
           {!item.sample ? (
@@ -533,6 +597,7 @@ function ImmersiveFeedCard({
   allowPlayer,
   onActivate,
   onClose,
+  autoPlay,
 }: {
   item: UniversalFeedItem;
   actions: FeedCardActions;
@@ -540,6 +605,7 @@ function ImmersiveFeedCard({
   allowPlayer: boolean;
   onActivate: () => void;
   onClose: () => void;
+  autoPlay: boolean;
 }) {
   const provider = PROVIDERS[item.provider];
   return (
@@ -567,6 +633,7 @@ function ImmersiveFeedCard({
             onActivate={onActivate}
             onClose={onClose}
             immersive
+            autoPlay={autoPlay}
           />
         </div>
         <div className="shrink-0 bg-linear-to-t from-black/80 to-transparent p-4">

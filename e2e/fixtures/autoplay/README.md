@@ -1,0 +1,6 @@
+This three-second silent teal clip is generated test media, not social content.
+It exercises real muted H.264/fMP4 HLS decoding without calling an external CDN.
+The browser fixture maps only its five fixed files to a provider-shaped URL.
+
+Generated with FFmpeg's `color=c=teal:s=160x90:r=15:d=3` source, libx264 baseline,
+one-second fMP4 HLS segments and no audio. No downloaded or user media is included.

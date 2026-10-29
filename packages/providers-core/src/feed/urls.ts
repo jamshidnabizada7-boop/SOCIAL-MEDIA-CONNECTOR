@@ -70,6 +70,8 @@ export function canonicalFeedUrl(provider: ProviderId, input: string): string {
       valid =
         ["facebook.com", "m.facebook.com"].includes(host) &&
         (/\/(?:posts|videos)\/[\w]+/.test(p) ||
+          /^\/reel\/\d+\/?$/.test(p) ||
+          (p === "/watch/" && /^\d+$/.test(u.searchParams.get("v") || "")) ||
           /^\/(?:permalink|story)\.php$/.test(p));
       break;
     case "mastodon":
@@ -84,6 +86,6 @@ export function canonicalFeedUrl(provider: ProviderId, input: string): string {
   if (provider !== "facebook") u.search = "";
   else
     for (const key of [...u.searchParams.keys()])
-      if (!["id", "story_fbid"].includes(key)) u.searchParams.delete(key);
+      if (!["id", "story_fbid", "v"].includes(key)) u.searchParams.delete(key);
   return u.href;
 }

@@ -10,15 +10,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aria/shared-types": "*",
+    "@sentry/browser": "11.9.0",
+    "@sentry/node": "11.9.0",
     "clsx": "^1.0.0",
+    "hls.js": "1.7.4",
     "lucide-react": "^0.544.0",
     "next": "16.4.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "tailwind-merge": "^3.0.0",
-    "@sentry/browser": "11.9.0",
-    "@sentry/node": "11.9.0",
-    "@aria/shared-types": "*"
+    "tailwind-merge": "^3.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

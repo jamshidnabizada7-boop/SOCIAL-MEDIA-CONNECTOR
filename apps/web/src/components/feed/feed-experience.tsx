@@ -668,6 +668,12 @@ function PersonalFeed({
             </h2>
           </>
         )}
+        {filters.provider === "facebook" && (
+          <p role="note" className="mb-5 rounded-xl border bg-studio-soft p-4 text-sm leading-relaxed text-ink-2">
+            Facebook shows posts from your connected Pages. Your personal Home feed and other people’s timelines are available on Facebook.
+            {" "}<a href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer" className="font-semibold text-accent-ink underline">Open Facebook</a>
+          </p>
+        )}
         <div
           className={cn(
             "grid items-start gap-6",
@@ -727,6 +733,7 @@ function PersonalFeed({
                     items={items}
                     actions={actions}
                     allowEmbeds={preferences.allowEmbeds}
+                    autoPlay={preferences.autoplayVideos !== false}
                     explicitPlayer={playerId}
                     onActivate={setPlayerId}
                     onClose={() => setPlayerId(null)}
@@ -764,6 +771,7 @@ function PersonalFeed({
                         <FeedCard
                           item={item}
                           compact={view === "explore"}
+                          autoPlay={preferences.autoplayVideos !== false}
                           key={item.id}
                           actions={actions}
                           active={playerId === item.id}
@@ -880,8 +888,8 @@ function PersonalFeed({
                 </Button>
               </div>
               <p className="px-2 text-xs leading-relaxed text-ink-2">
-                Official players load on request. Availability and controls
-                depend on the original platform. Saves stay in Aria Hub.
+                Supported videos play muted as you scroll. Change autoplay in
+                Sources & preferences. Availability depends on the platform.
               </p>
             </aside>
           )}

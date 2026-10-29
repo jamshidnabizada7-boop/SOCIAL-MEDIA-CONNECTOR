@@ -40,6 +40,7 @@ export interface UniversalSearchResponse {
   topics: SearchTopic[];
   coverage: SearchCoverage[];
   searchedAt: string;
+  autoplayVideos?: boolean;
   sample?: boolean;
 }
 

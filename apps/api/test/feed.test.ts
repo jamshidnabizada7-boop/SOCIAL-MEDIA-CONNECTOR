@@ -509,6 +509,7 @@ describe("feed authorization, caching and durable personalization", () => {
     expect(saved.availability).toBe("unavailable");
     expect(saved.caption).toBe("");
     expect(saved.embedUrl).toBeUndefined();
+      expect(saved.playbackUrl).toBeUndefined();
     expect(saved.images).toEqual([]);
     await mutate("DELETE", `/saved/${item.id}`);
   });

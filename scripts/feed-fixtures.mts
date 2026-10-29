@@ -34,6 +34,7 @@ export function feedFixture(
             i % 3 === 0
               ? {
                   $type: "app.bsky.embed.video#view",
+                  playlist: `https://video.bsky.app/watch/did%3Aplc%3Afeed${i % 6}/fixturevideo/playlist.m3u8`,
                   thumbnail: "https://cdn.fixture.test/video.jpg",
                 }
               : i % 3 === 1

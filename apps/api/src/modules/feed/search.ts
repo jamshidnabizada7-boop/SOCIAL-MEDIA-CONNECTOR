@@ -318,6 +318,7 @@ export function registerUniversalSearch(
         topics: [],
         coverage: [],
         searchedAt: new Date().toISOString(),
+        autoplayVideos: prefs.autoplayVideos !== false,
       };
       const people = new Map<string, SearchPerson>(),
         posts = new Map<string, (typeof response.posts)[number]>(),

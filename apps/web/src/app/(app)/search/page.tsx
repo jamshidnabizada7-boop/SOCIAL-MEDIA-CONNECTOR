@@ -520,6 +520,7 @@ function SearchContent({
                               item={item}
                               active={activePlayer === item.id}
                               allowed={!data.sample}
+                              autoPlay={data.autoplayVideos !== false}
                               onActivate={() => setActivePlayer(item.id)}
                               onClose={() => setActivePlayer(null)}
                             />

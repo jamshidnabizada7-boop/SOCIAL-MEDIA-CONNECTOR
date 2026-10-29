@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import path from "node:path";
 async function signup(page: Page) {
   await page.goto("/signup");
   await page.getByLabel("Full name").fill("Feed Browser Tester");
@@ -12,6 +13,18 @@ async function signup(page: Page) {
   await expect(page).toHaveURL(/\/(onboarding|dashboard)$/);
 }
 async function networkFixtures(page: Page) {
+  await page.route("https://video.bsky.app/**", (route) => {
+    const name = new URL(route.request().url()).pathname.split("/").at(-1)!;
+    if (!/^(playlist\.m3u8|init\.mp4|segment[0-2]\.m4s)$/.test(name))
+      return route.abort();
+    return route.fulfill({
+      path: path.resolve("e2e/fixtures/autoplay", name),
+      contentType: name.endsWith("m3u8")
+        ? "application/vnd.apple.mpegurl"
+        : "video/mp4",
+      headers: { "access-control-allow-origin": "*" },
+    });
+  });
   await page.route("https://cdn.fixture.test/**", (route) =>
     route.fulfill({
       status: 200,
@@ -113,23 +126,32 @@ test("mobile Feed navigation, official single-player lifecycle, video arrows and
   await expect(
     page.getByRole("region", { name: "Immersive video browsing" }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Load Bluesky player" })
-    .first()
-    .click();
-  await expect(page.locator("iframe")).toHaveCount(1);
+  const video = page.locator('video[data-aria-video="bluesky"]');
+  await expect(video).toHaveCount(1);
+  await expect
+    .poll(() =>
+      video.evaluate(
+        (el: HTMLVideoElement) => !el.paused && el.currentTime > 0 && el.muted,
+      ),
+    )
+    .toBe(true);
   await expect(
-    page.getByText(
-      "Bluesky shows the full post. Scroll inside it to reach video controls.",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await expect(page.locator("iframe")).toHaveAttribute(
-    "src",
-    /https:\/\/embed\.bsky\.app\/embed\/did:/,
-  );
+    page.getByRole("button", { name: "Load Bluesky player" }),
+  ).toHaveCount(0);
+  const previous = await video.elementHandle();
   await page.getByRole("button", { name: "Next video", exact: true }).click();
   await expect(page.locator("iframe")).toHaveCount(0);
+  await expect
+    .poll(() => previous!.evaluate((el: HTMLVideoElement) => el.paused))
+    .toBe(true);
+  await expect(video).toHaveCount(1);
+  await expect
+    .poll(() =>
+      video.evaluate(
+        (el: HTMLVideoElement) => !el.paused && el.currentTime > 0 && el.muted,
+      ),
+    )
+    .toBe(true);
   await page.getByRole("region", { name: "Video feed", exact: true }).focus();
   await page.keyboard.press("ArrowDown");
   await page.screenshot({
