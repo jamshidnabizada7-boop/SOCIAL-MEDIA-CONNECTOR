@@ -69,6 +69,7 @@ test("universal search finds accounts and content, filters without more calls an
   await page
     .getByRole("link", { name: "Search across platforms", exact: true })
     .click();
+  await expect(page).toHaveURL(/\/search$/);
   await page
     .getByLabel("Search people and content", { exact: true })
     .fill("Creator");
