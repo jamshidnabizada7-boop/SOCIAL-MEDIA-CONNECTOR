@@ -4,6 +4,16 @@ The full project is in [GitHub master](https://github.com/jamshidnabizada7-boop/
 
 ## Universal Feed development (not deployed)
 
+The subsequent [Stitch UI implementation, PR #3](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/pull/3)
+is on `codex/stitch-redesign`, based on the Feed branch. It implements all eight
+shared design screens, updates desktop/mobile navigation and preserves the real
+Feed, accounts, publishing and Inbox services. Workspace switching now resolves
+requests to the selected membership and recreates page/service state. A native
+PostgreSQL fixture is available to browser CI because the local embedded socket
+multiplexer can misroute concurrent protocol messages. See the
+[screen mapping and verification notes](STITCH-REDESIGN.md). This UI change has
+not changed Oracle's application, database or provider settings.
+
 Branch `codex/universal-feed` adds `/feed`, seven categories, a stable mixed-content
 API, personal bookmarks/follows/preferences, source controls, official players,
 immersive video browsing and labelled isolated demo mode. Migration `0009` adds

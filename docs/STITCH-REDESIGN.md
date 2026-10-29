@@ -70,6 +70,9 @@ all seven routes at 320/390/768/1280/1600px, creator follow persistence, phone
 navigation, context-panel dismissal/focus/draft retention, week selection and
 destination selection. They assert that page content does not overflow the
 viewport. The check found and fixed a long LinkedIn name expanding a phone grid.
+Eight screenshot views are written under `.local/stitch-evidence` and included
+in the CI verification artifact. The final visual review removed duplicate
+controls above mobile Explore and shortened the phone connection warning.
 
 API-backed publishing and Inbox regression results and the final CI evidence
 are recorded with this change's pull request. These tests use isolated local
@@ -77,6 +80,12 @@ services and provider fixtures; they do not publish to production accounts.
 Additional API browser cases create two isolated workspaces, verify that list
 data and newly saved drafts belong to the selected one, and exercise recovery
 from a failed workspace-list request.
+CI uses a dedicated PostgreSQL 16 service for these cases. The local PGlite
+multi-connection socket can return incorrect/empty results under concurrent
+traffic ([upstream report](https://github.com/electric-sql/pglite/issues/1046));
+this is not used as release evidence for native PostgreSQL. Rate limits stay
+enabled: the connection browser test observes `Retry-After` and uses the dialog's
+retry when the suite's shared IP reaches its budget.
 
 This implementation is based on `codex/universal-feed` and requires that Feed
 change first. It has not been deployed on Oracle. Production remains at the
