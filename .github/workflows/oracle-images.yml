@@ -1,0 +1,49 @@
+name: Oracle ARM64 release images
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/stitch-redesign]
+    paths:
+      - .github/workflows/oracle-images.yml
+      - deploy/api.Dockerfile
+      - deploy/web.Dockerfile
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_LEGAL_ENTITY: ${{ vars.ARIA_LEGAL_ENTITY }}
+      NEXT_PUBLIC_CONTACT_EMAIL: ${{ vars.ARIA_CONTACT_EMAIL }}
+      NEXT_PUBLIC_LEGAL_UPDATED: ${{ vars.ARIA_LEGAL_UPDATED }}
+      NEXT_PUBLIC_SENTRY_DSN: ${{ vars.ARIA_PUBLIC_SENTRY_DSN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production runtime images
+        run: |
+          test "$(uname -m)" = aarch64
+          docker build -f deploy/api.Dockerfile --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "ariahub-v2-app:$GITHUB_SHA" .
+          docker build -f deploy/web.Dockerfile --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "ariahub-v2-web:$GITHUB_SHA" \
+            --build-arg NEXT_PUBLIC_DATA_MODE=api \
+            --build-arg "NEXT_PUBLIC_LEGAL_ENTITY=$NEXT_PUBLIC_LEGAL_ENTITY" \
+            --build-arg "NEXT_PUBLIC_CONTACT_EMAIL=$NEXT_PUBLIC_CONTACT_EMAIL" \
+            --build-arg "NEXT_PUBLIC_LEGAL_UPDATED=$NEXT_PUBLIC_LEGAL_UPDATED" \
+            --build-arg "NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN" .
+      - name: Export checksummed release bundle
+        run: |
+          mkdir release
+          for image in ariahub-v2-app ariahub-v2-web; do
+            test "$(docker image inspect --format '{{.Architecture}}' "$image:$GITHUB_SHA")" = arm64
+            test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image:$GITHUB_SHA")" = "$GITHUB_SHA"
+          done
+          docker save "ariahub-v2-app:$GITHUB_SHA" "ariahub-v2-web:$GITHUB_SHA" | gzip -1 > release/images.tar.gz
+          git archive --format=tar HEAD > release/source.tar
+          printf '%s\n' "$GITHUB_SHA" > release/REVISION
+          (cd release && sha256sum images.tar.gz source.tar REVISION > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oracle-arm64-${{ github.sha }}
+          path: release/
+          compression-level: 0
+          retention-days: 7

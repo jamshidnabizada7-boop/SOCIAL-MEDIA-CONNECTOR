@@ -14,7 +14,19 @@ tar -xf "releases/$revision.tar"
 # remaining shell commands (including the final health/revision bookkeeping).
 compose() { docker compose -f deploy/docker-compose.prod.yml --env-file .env "$@" < /dev/null; }
 compose config -q
-compose build migrate web
+case "${ARIA_USE_PREBUILT:-0}" in
+  0) compose build migrate web ;;
+  1)
+    # Refuse an unrelated/incorrect-architecture image before stopping writers.
+    case "$(uname -m)" in aarch64|arm64) arch=arm64 ;; x86_64|amd64) arch=amd64 ;; *) echo 'Unsupported host architecture' >&2; exit 1 ;; esac
+    images=$(compose config --format json | python3 -c 'import json,sys; c=json.load(sys.stdin); print(c["services"]["migrate"]["image"]); print(c["services"]["web"]["image"])')
+    for image in $images; do
+      actual=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}|{{.Architecture}}' "$image")
+      [ "$actual" = "$revision|$arch" ] || { echo "Prebuilt image does not match release/architecture: $image" >&2; exit 1; }
+    done
+    ;;
+  *) echo 'ARIA_USE_PREBUILT must be 0 or 1' >&2; exit 1 ;;
+esac
 compose up -d postgres
 compose stop api worker backup
 # Deliberately no restart trap: migration failure must leave writers stopped.
