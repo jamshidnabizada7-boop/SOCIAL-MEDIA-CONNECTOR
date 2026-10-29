@@ -31,6 +31,7 @@ test("Stitch screens keep working at phone, tablet and desktop widths", async ({
     ]) {
       await page.goto(route);
       await expect(page.getByRole("main")).toBeVisible();
+      if (route === "/dashboard") await expect(page.getByRole("heading", {name:"Publishing Schedule",exact:true})).toBeVisible();
       if (route === "/composer")
         await expect(page.getByLabel("Caption", { exact: true })).toBeVisible();
       if (route === "/accounts")

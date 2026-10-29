@@ -176,6 +176,7 @@
   .composer-media { padding: 12px; }
   .composer-caption { padding: 12px; }
   .composer-actions > div > div:first-of-type { flex-basis: 100%; }
+  .composer-actions > div > button:not(:first-child) { padding-inline: 10px; font-size: 12px; }
   .feed-page .explore-card header > img,
   .feed-page .explore-card header > span:first-child,
   .feed-page .explore-card header > div:first-of-type { display: none; }

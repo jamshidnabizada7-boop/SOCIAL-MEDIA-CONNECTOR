@@ -1545,8 +1545,7 @@ function ComposerInner() {
             disabled={!!publishBlockReason}
           >
             <Upload className="size-4" />
-            Publish everywhere
-            {selected.length > 0 ? ` (${selected.length})` : ""}
+            <span className="sm:hidden">Publish now</span><span className="hidden sm:inline">Publish everywhere{selected.length > 0 ? ` (${selected.length})` : ""}</span>
           </Button>
         </div>
       </div>
