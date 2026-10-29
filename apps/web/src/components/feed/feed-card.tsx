@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NativeFeedVideo } from "./native-feed-video";
+import { FeedAvatar } from "./feed-avatar";
 
 export interface FeedCardActions {
   save: (item: UniversalFeedItem) => void;
@@ -334,20 +335,7 @@ export function FeedCard({
           compact && "!gap-2 !p-3",
         )}
       >
-        {item.authorAvatarUrl ? (
-          <FeedImage
-            src={item.authorAvatarUrl}
-            alt=""
-            className="size-10 min-h-0 shrink-0 rounded-full object-cover"
-          />
-        ) : (
-          <span
-            aria-hidden
-            className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent-ink"
-          >
-            {item.authorName.slice(0, 2).toUpperCase()}
-          </span>
-        )}
+        <FeedAvatar name={item.authorName} src={item.authorAvatarUrl} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{item.authorName}</p>
           <p className="truncate text-xs text-ink-2">

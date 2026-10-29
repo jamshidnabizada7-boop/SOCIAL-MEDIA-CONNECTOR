@@ -442,6 +442,111 @@ describe("real feed adapters and safe metadata", () => {
     expect(result[0].canEmbed).toBe(true);
   });
   it.each(["facebook", "instagram", "threads"] as const)(
+    "fetches the authorized %s profile photo once for the whole post batch",
+    async (provider) => {
+      const avatar = "https://scontent.fixture.fbcdn.net/profile.jpg?oe=123";
+      const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith(account.externalAccountId)) {
+          expect(url.searchParams.get("fields")).toBe(
+            provider === "facebook"
+              ? "picture.width(96).height(96)"
+              : provider === "instagram"
+                ? "profile_picture_url"
+                : "threads_profile_picture_url",
+          );
+          return json(
+            provider === "facebook"
+              ? { picture: { data: { url: avatar, is_silhouette: false } } }
+              : provider === "instagram"
+                ? { profile_picture_url: avatar }
+                : { threads_profile_picture_url: avatar },
+          );
+        }
+        return json({
+          data: [1, 2].map((n) => ({
+            id: String(n),
+            permalink_url: `https://www.facebook.com/owner/posts/${n}`,
+            permalink:
+              provider === "instagram"
+                ? `https://www.instagram.com/p/ABC${n}/`
+                : `https://www.threads.com/@owner/post/ABC${n}`,
+          })),
+        });
+      });
+      const result = await retrieveFeed({
+        provider,
+        kind: "account",
+        config: {},
+        account,
+        accessToken: "fixture",
+        fetchImpl,
+      });
+      expect(result).toHaveLength(2);
+      expect(result.every((item) => item.authorAvatarUrl === avatar)).toBe(
+        true,
+      );
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    },
+  );
+  it("keeps Facebook posts when the profile photo is unavailable or unsafe", async () => {
+    for (const profile of [
+      null,
+      {
+        picture: {
+          data: {
+            url: "https://scontent.fixture.fbcdn.net/silhouette.jpg",
+            is_silhouette: true,
+          },
+        },
+      },
+      {
+        picture: {
+          data: {
+            url: "https://graph.facebook.com/picture?access_token=private",
+          },
+        },
+      },
+      {
+        picture: {
+          data: {
+            url: "https://graph.facebook.com/picture?appsecret_proof=private",
+          },
+        },
+      },
+      { picture: { data: { url: "javascript:alert(1)" } } },
+    ]) {
+      const rows = await retrieveFeed({
+        provider: "facebook",
+        kind: "account",
+        config: {},
+        account,
+        accessToken: "fixture",
+        fetchImpl: async (input) => {
+          if (
+            new URL(String(input)).pathname.endsWith(account.externalAccountId)
+          )
+            return json(
+              profile || { error: { message: "Profile unavailable" } },
+              profile ? 200 : 503,
+            );
+          return json({
+            data: [
+              {
+                id: "123",
+                message: "Available post",
+                permalink_url: "https://www.facebook.com/owner/posts/123",
+              },
+            ],
+          });
+        },
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].caption).toBe("Available post");
+      expect(rows[0].authorAvatarUrl).toBeUndefined();
+    }
+  });
+  it.each(["facebook", "instagram", "threads"] as const)(
     "retrieves only authorized %s account metadata and never video streams",
     async (provider) => {
       const result = await retrieveFeed({

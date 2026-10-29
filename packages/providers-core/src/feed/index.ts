@@ -669,11 +669,40 @@ export async function retrieveFeed(
     : isIG
       ? "id,caption,media_type,permalink,thumbnail_url,media_url,timestamp,like_count,comments_count"
       : "id,text,media_type,permalink,thumbnail_url,media_url,timestamp,username";
-  const data = await read(
-    ctx,
-    `${baseUrl}/${id(ctx.account.externalAccountId)}/${isFB ? "published_posts" : isIG ? "media" : "threads"}?fields=${fields}&limit=30`,
-    true,
+  const profileField = isFB
+    ? "picture.width(96).height(96)"
+    : isIG
+      ? "profile_picture_url"
+      : "threads_profile_picture_url";
+  const [data, profile] = await Promise.all([
+    read(
+      ctx,
+      `${baseUrl}/${id(ctx.account.externalAccountId)}/${isFB ? "published_posts" : isIG ? "media" : "threads"}?fields=${fields}&limit=30`,
+      true,
+    ),
+    read(
+      { ...ctx, timeoutMs: 6000 },
+      `${baseUrl}/${id(ctx.account.externalAccountId)}?${new URLSearchParams({ fields: profileField })}`,
+      true,
+    ).catch(() => ({}) as Obj),
+  ]);
+  const picture = obj(obj(profile.picture).data);
+  const candidateAvatar = safeFeedUrl(
+    isFB
+      ? picture.is_silhouette === true
+        ? undefined
+        : picture.url
+      : isIG
+        ? profile.profile_picture_url
+        : profile.threads_profile_picture_url,
   );
+  const avatar =
+    candidateAvatar &&
+    !["access_token", "appsecret_proof"].some((key) =>
+      new URL(candidateAvatar).searchParams.has(key),
+    )
+      ? candidateAvatar
+      : undefined;
   return array(data.data).flatMap((p) => {
     const item = base(
       ctx,
@@ -684,6 +713,7 @@ export async function retrieveFeed(
     );
     if (!item) return [];
     item.authorHandle = ctx.account!.handle;
+    item.authorAvatarUrl = avatar;
     item.caption = str(isFB ? p.message : isIG ? p.caption : p.text);
     item.publishedAt = date(
       isFB ? p.created_time : isIG ? p.timestamp : p.timestamp,

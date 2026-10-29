@@ -374,6 +374,9 @@ export function registerUniversalSearch(
               item.originalUrl,
             ),
             key = `${item.provider}:${item.authorId}`;
+          const existing = people.get(key);
+          if (existing && !existing.avatarUrl && item.authorAvatarUrl)
+            existing.avatarUrl = item.authorAvatarUrl;
           if (url && !people.has(key))
             people.set(key, {
               provider: item.provider,

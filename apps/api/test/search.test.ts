@@ -186,6 +186,7 @@ beforeAll(async () => {
       providerPostId: name,
       authorId: account.externalAccountId,
       authorName: name,
+      authorAvatarUrl: `https://cdn.fixture.test/${name.replaceAll(" ", "-")}.jpg`,
       caption: "Space local launch",
       images: [],
       originalUrl: "https://www.facebook.com/111122223333/posts/999",
@@ -270,6 +271,9 @@ describe("workspace-scoped federated search", () => {
       true,
     );
     expect(data.people.some((p) => p.origin === "connected")).toBe(true);
+    expect(
+      data.people.find((p) => p.name === "Space Own Page")?.avatarUrl,
+    ).toBe("https://cdn.fixture.test/Space-Own-Cache.jpg");
     expect(
       data.posts.some((p) => p.item.authorName === "Space Own Cache"),
     ).toBe(true);

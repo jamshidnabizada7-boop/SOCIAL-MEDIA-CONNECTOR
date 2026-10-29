@@ -25,6 +25,7 @@ export function feedFixture(
             did: `did:plc:feed${i % 6}`,
             displayName: `Feed Creator ${i % 6}`,
             handle: `feed${i % 6}.bsky.social`,
+            avatar: "https://cdn.fixture.test/avatar.jpg",
           },
           record: {
             text: `Technology and education fixture perspective ${i}. A real cached API response in the isolated browser harness.`,

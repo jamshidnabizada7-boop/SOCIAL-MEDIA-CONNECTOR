@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable @next/next/no-img-element -- Public provider avatars load from their original hosts without rehosting. */
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -23,6 +22,7 @@ import {
 import { useSession, useToast } from "@/components/providers";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
 import { FeedImage, FeedPlayer } from "@/components/feed/feed-card";
+import { FeedAvatar } from "@/components/feed/feed-avatar";
 import { Button } from "@/components/ui/button";
 import { feedService } from "@/lib/services/feed";
 import { universalSearch } from "@/lib/services/search";
@@ -88,24 +88,11 @@ function PersonCard({
       aria-label={`${PROVIDERS[person.provider].name} account ${person.name}`}
     >
       <div className="flex min-w-0 items-start gap-3">
-        <span
-          className="relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-studio-soft font-display font-bold text-accent-ink"
-          aria-hidden
-        >
-          {person.name.slice(0, 1)}
-          {person.avatarUrl && (
-            <img
-              src={person.avatarUrl}
-              alt=""
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              className="absolute inset-0 size-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          )}
-        </span>
+        <FeedAvatar
+          name={person.name}
+          src={person.avatarUrl}
+          className="size-12 bg-studio-soft font-display font-bold"
+        />
         <div className="min-w-0 flex-1">
           <a
             href={person.url}

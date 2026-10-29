@@ -110,6 +110,51 @@ test("mixed API feed paginates without duplicates and persists user saves and cr
   });
 });
 
+test("author photos render at avatar size and failed photos fall back to initials", async ({
+  page,
+}) => {
+  await networkFixtures(page);
+  await signup(page);
+  await page.goto("/feed");
+  const avatars = page.locator(
+    "article[data-feed-id] header img[data-author-avatar]",
+  );
+  await expect(avatars.first()).toBeVisible({ timeout: 40000 });
+  await expect
+    .poll(() =>
+      avatars
+        .first()
+        .evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0),
+    )
+    .toBe(true);
+  expect(
+    await avatars
+      .first()
+      .evaluate((el) => ({
+        width: el.getBoundingClientRect().width,
+        height: el.getBoundingClientRect().height,
+      })),
+  ).toEqual({ width: 40, height: 40 });
+  await page.route("https://cdn.fixture.test/avatar.jpg", (route) =>
+    route.abort(),
+  );
+  await page.reload();
+  const header = page
+    .locator("article[data-feed-id] header")
+    .filter({ hasText: "Feed Creator" })
+    .first();
+  await expect(header).toBeVisible();
+  await expect(header.locator("img[data-author-avatar]")).toHaveCount(0);
+  await expect(header).toContainText("FC");
+  await expect(header).not.toContainText("Preview unavailable");
+  expect(
+    await header
+      .locator("span[aria-hidden]")
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().width),
+  ).toBe(40);
+});
+
 test("authorized Facebook media plays directly without loading an external iframe", async ({
   page,
 }) => {
