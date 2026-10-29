@@ -55,19 +55,19 @@ export function VideoFeed({
   function move(direction: number) {
     const next = items[index + direction];
     if (next) {
-      nodes.current
-        .get(next.id)
-        ?.scrollIntoView({
-          block: "nearest",
-          behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
-            .matches
-            ? "instant"
-            : "smooth",
-        });
+      nodes.current.get(next.id)?.scrollIntoView({
+        block: "nearest",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
+      });
     } else if (direction > 0 && hasMore && !busy) loadMore();
   }
   return (
-    <section className="min-w-0" aria-label="Immersive video browsing">
+    <section
+      className="video-experience min-w-0"
+      aria-label="Immersive video browsing"
+    >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <p className="mr-auto text-xs text-ink-2">
           Swipe or scroll · ↑ / ↓ to browse · Native player controls
@@ -115,7 +115,7 @@ export function VideoFeed({
         role="region"
         tabIndex={0}
         aria-label="Video feed"
-        className="h-[76dvh] min-h-[480px] max-h-[1000px] snap-y snap-mandatory overflow-y-auto overscroll-contain rounded-2xl bg-surface-2 p-1 focus-visible:outline-2 focus-visible:outline-accent"
+        className="mx-auto h-[calc(100dvh-230px)] min-h-[480px] max-h-[1000px] max-w-[650px] snap-y snap-mandatory overflow-y-auto overscroll-contain rounded-2xl bg-[#0b0f12] p-1 focus-visible:outline-2 focus-visible:outline-accent"
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -132,7 +132,7 @@ export function VideoFeed({
               if (el) nodes.current.set(item.id, el);
               else nodes.current.delete(item.id);
             }}
-            className="h-full snap-start snap-always pb-3"
+            className="h-full snap-start snap-always"
           >
             <FeedCard
               item={item}

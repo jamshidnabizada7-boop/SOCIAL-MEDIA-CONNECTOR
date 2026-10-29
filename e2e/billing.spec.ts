@@ -8,7 +8,7 @@ test('billing outage shows a retryable error, never a demo paid plan or invoices
   await page.getByRole('button', {name:'Create account',exact:true}).click();
   await expect(page).toHaveURL(/\/(onboarding|dashboard)$/);
   let unavailable=true;
-  await page.route('**/v1/workspaces/current/billing', route => unavailable
+  await page.route('**/v1/workspaces/*/billing', route => unavailable
     ? route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'unavailable',message:'Billing cannot be loaded right now.'}})})
     : route.continue());
   await page.goto('/billing?checkout=success');

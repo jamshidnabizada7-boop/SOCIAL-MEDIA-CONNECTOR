@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Users,
   UserRound,
+  Clapperboard,
 } from "lucide-react";
 
 export interface NavItem {
@@ -28,8 +29,9 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Home", icon: Home, section: "workspace" },
-  { href: "/feed", label: "Feed", icon: Compass, section: "workspace" },
+  { href: "/feed", label: "Home", icon: Home, section: "workspace" },
+  { href: "/explore", label: "Explore", icon: Compass, section: "workspace" },
+  { href: "/dashboard", label: "Studio", icon: Clapperboard, section: "workspace" },
   { href: "/composer", label: "Create", icon: PenSquare, section: "workspace", accent: true },
   { href: "/calendar", label: "Calendar", icon: CalendarDays, section: "workspace" },
   { href: "/queue", label: "Queue", icon: ListOrdered, section: "workspace" },
@@ -45,11 +47,11 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 export const MOBILE_NAV = [
-  { href: "/dashboard", label: "Home", icon: Home },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/feed", label: "Home", icon: Home },
+  { href: "/explore", label: "Explore", icon: Compass },
   { href: "/composer", label: "Create", icon: PenSquare },
-  { href: "/posts", label: "Posts", icon: FolderOpen },
-  { href: "/accounts", label: "Accounts", icon: ShieldCheck },
+  { href: "/inbox", label: "Inbox", icon: Inbox },
+  { href: "/accounts", label: "Profile", icon: UserRound },
 ];
 
 export const PROFILE_HREF = "/settings?tab=profile";

@@ -14,10 +14,10 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <header className="border-b bg-paper/60 px-4 pb-5 pt-6 lg:px-8">
+    <header className="page-header px-4 pb-5 pt-6 lg:px-8">
       <div className="mx-auto flex max-w-[1200px] flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-[22px] font-bold tracking-tight">{title}</h1>
+          <h1 className="font-display text-[22px] font-bold tracking-[-.015em]">{title}</h1>
           {description && <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-2">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
