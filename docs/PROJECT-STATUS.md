@@ -1,10 +1,13 @@
 # Project handoff — 29 October 2026
 
-Universal search and feed media fixes are now deployed at application revision
-`d75bbb80cbd83d81de0e9c34ed5b8734a3d1bab0` on `codex/universal-search`, in
+Universal search, feed media and profile-picture fixes are deployed at application revision
+`a6ad9b4716b7fa48a761eb4176a5d6ad0f034ddd` on `codex/universal-search`, in
 [PR #4](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/pull/4).
 Live account search, Bluesky/Facebook muted video autoplay and Facebook photos were verified.
-The release passed 254 application tests and 17 browser cases; see the
+The current release passed 258 application tests and 18 browser cases. All 72
+active cached Facebook account posts have profile photos, and three real Page
+images returned valid image data. See the
+[profile-photo release report](ORACLE-PROFILE-PHOTOS-2026-10-29.md) and earlier
 [production search/media report](ORACLE-SEARCH-MEDIA-RELEASE-2026-10-29.md).
 Provider feed restrictions remain explicit in the product and coverage guide.
 

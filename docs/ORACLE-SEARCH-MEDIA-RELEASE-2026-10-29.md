@@ -1,6 +1,9 @@
 # Universal search and feed media — production verification
 
-Application revision `d75bbb80cbd83d81de0e9c34ed5b8734a3d1bab0` is deployed at
+The newer [profile-picture patch](ORACLE-PROFILE-PHOTOS-2026-10-29.md) is now deployed.
+The verification below records its preceding search/media release.
+
+Application revision `d75bbb80cbd83d81de0e9c34ed5b8734a3d1bab0` was deployed at
 [Aria Hub](https://app.myariahub.com). Source is on `codex/universal-search` in
 [PR #4](https://github.com/jamshidnabizada7-boop/SOCIAL-MEDIA-CONNECTOR/pull/4),
 based on the existing Stitch branch. The prior application revision is

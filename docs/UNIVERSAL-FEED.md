@@ -2,8 +2,8 @@
 
 Implemented in the existing app at `/feed`, alongside publishing and Social Inbox.
 Deployed on Oracle with the Stitch UI at application revision
-`d75bbb80cbd83d81de0e9c34ed5b8734a3d1bab0`, including universal search, Bluesky
-autoplay and Facebook Page media. Migration `0009` added eight tables;
+`a6ad9b4716b7fa48a761eb4176a5d6ad0f034ddd`, including universal search, Bluesky
+autoplay, Facebook Page media and provider profile pictures. Migration `0009` added eight tables;
 production has 49. See [live deployment evidence](ORACLE-SEARCH-MEDIA-RELEASE-2026-10-29.md).
 
 ## What works
@@ -33,6 +33,14 @@ Saves, follows, hides, unavailable reports, preferred networks, interests and
 "see fewer" signals belong to the signed-in user. They do not perform native
 social actions. Likes/comments/shares are display-only metrics when actually
 returned; unknown values remain null. Native actions open the original network.
+
+Profile photos supplied by Bluesky and Mastodon are retained with author metadata.
+Connected Facebook Pages, Instagram accounts and Threads profiles also read their
+authorized profile picture once per post batch. A failed profile request leaves
+the posts available. Provider photos load directly in fixed circular avatars in
+post headers, Creator Spotlight and account search. Missing or failed images use
+initials, and refreshed image URLs can load again. Graph credentials are never
+included in a displayed avatar URL. Photos expire with their cached metadata.
 
 ## Actual provider coverage
 
