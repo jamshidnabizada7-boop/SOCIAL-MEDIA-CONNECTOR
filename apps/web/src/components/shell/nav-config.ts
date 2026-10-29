@@ -6,6 +6,7 @@ import {
   FolderOpen,
   Home,
   Compass,
+  Search,
   Inbox,
   ListOrdered,
   PenSquare,
@@ -31,6 +32,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/feed", label: "Home", icon: Home, section: "workspace" },
   { href: "/explore", label: "Explore", icon: Compass, section: "workspace" },
+  { href: "/search", label: "Search", icon: Search, section: "workspace" },
   { href: "/dashboard", label: "Studio", icon: Clapperboard, section: "workspace" },
   { href: "/composer", label: "Create", icon: PenSquare, section: "workspace", accent: true },
   { href: "/calendar", label: "Calendar", icon: CalendarDays, section: "workspace" },

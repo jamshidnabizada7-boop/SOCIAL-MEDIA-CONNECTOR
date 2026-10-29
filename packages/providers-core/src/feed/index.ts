@@ -11,6 +11,7 @@ import { fetchJson, type FetchLike } from "../http.js";
 import { assertPublicHost } from "../net-guard.js";
 import { plainHtml } from "../engagement/util.js";
 import { canonicalFeedUrl, safeFeedUrl } from "./urls.js";
+export { read as readFeedMetadata, mastodonItem as normalizeMastodonFeedItem };
 export { canonicalFeedUrl, safeFeedUrl } from "./urls.js";
 
 export interface FeedContext {
@@ -26,6 +27,7 @@ export interface FeedContext {
   };
   accessToken?: string;
   fetchImpl?: FetchLike;
+  timeoutMs?: number;
 }
 export type RetrievedFeedItem = Omit<
   UniversalFeedItem,
@@ -231,7 +233,7 @@ async function read(
   const data = await fetchJson<unknown>(ctx.provider, url, {
     ...init,
     redirect: "error",
-    timeoutMs: 15000,
+    timeoutMs: ctx.timeoutMs ?? 15000,
     maxResponseBytes: 2000000,
     fetchImpl: ctx.fetchImpl,
     headers: {
@@ -271,16 +273,8 @@ function base(
     sensitive: false,
   };
 }
-function bskyItem(ctx: FeedContext, p: Obj): RetrievedFeedItem | null {
-  const author = obj(p.author),
-    record = obj(p.record),
-    uri = str(p.uri),
-    embed = obj(p.embed);
-  const labels = [
-    ...array(p.labels),
-    ...array(author.labels),
-    ...array(obj(record.labels).values),
-  ]
+export function publicBlueskyLabels(...groups: unknown[]): string[] | null {
+  const labels = groups.flatMap(array)
     .filter(
       (label) =>
         label.neg !== true &&
@@ -304,6 +298,15 @@ function bskyItem(ctx: FeedContext, p: Obj): RetrievedFeedItem | null {
     )
   )
     return null;
+  return labels;
+}
+function bskyItem(ctx: FeedContext, p: Obj): RetrievedFeedItem | null {
+  const author = obj(p.author),
+    record = obj(p.record),
+    uri = str(p.uri),
+    embed = obj(p.embed);
+  const labels = publicBlueskyLabels(p.labels, author.labels, obj(record.labels).values);
+  if (!labels) return null;
   const item = base(
     ctx,
     uri,
@@ -410,6 +413,7 @@ async function youtube(ctx: FeedContext): Promise<RetrievedFeedItem[]> {
       ctx.account?.externalAccountId || ctx.config.actor || "",
     );
   else query.set("q", ctx.config.query || "education technology");
+  if (ctx.kind === "search") query.set("safeSearch", "strict");
   const search = await read(
     ctx,
     `https://www.googleapis.com/youtube/v3/search?${query}`,

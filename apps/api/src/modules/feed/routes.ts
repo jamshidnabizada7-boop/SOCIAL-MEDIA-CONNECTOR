@@ -31,6 +31,7 @@ import {
   validateFeedSource,
 } from "@aria/providers-core";
 import { requireAuth, requireWorkspacePermission } from "../../plugins/auth.js";
+import { registerUniversalSearch } from "./search.js";
 
 const providers = z.enum([
   "facebook",
@@ -986,6 +987,7 @@ export function registerFeedRoutes(app: FastifyInstance): void {
   app.get("/v1/me/feed/preferences", { preHandler: requireAuth(app) }, (req) =>
     getPreferences(req.user!.id),
   );
+  registerUniversalSearch(app, { bootstrap, preferences: getPreferences, items: accessibleItems });
   app.put(
     "/v1/me/feed/preferences",
     { preHandler: requireAuth(app) },

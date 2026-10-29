@@ -555,3 +555,4 @@ export function resolveNotificationPrefs(stored: Record<string, boolean> | null 
 export * from "./providers.js";
 export * from "./feed.js";
 export * from "./feed-mixer.js";
+export * from "./search.js";

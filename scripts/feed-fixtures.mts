@@ -5,8 +5,19 @@ export function feedFixture(
   query: URLSearchParams,
 ): unknown {
   const now = "2026-10-28T12:00:00Z";
-  if (provider === "bluesky")
+  if (provider === "bluesky" && pathname.endsWith("searchActors"))
     return {
+      actors: [
+        {
+          did: "did:plc:searchcreator",
+          handle: "searchcreator.bsky.social",
+          displayName: "Search Creator",
+          description: "Technology and education",
+        },
+      ],
+    };
+  if (provider === "bluesky") {
+    const result = {
       feed: Array.from({ length: 40 }, (_, i) => ({
         post: {
           uri: `at://did:plc:feed${i % 6}/app.bsky.feed.post/feedkey${i}`,
@@ -41,8 +52,12 @@ export function feedFixture(
         },
       })),
     };
-  if (provider === "mastodon")
-    return Array.from({ length: 30 }, (_, i) => ({
+    return pathname.endsWith("searchPosts")
+      ? { posts: result.feed.map((entry) => entry.post) }
+      : result;
+  }
+  if (provider === "mastodon") {
+    const statuses = Array.from({ length: 30 }, (_, i) => ({
       id: String(1000 + i),
       visibility: "public",
       url: `https://mastodon.social/@feedcreator/${1000 + i}`,
@@ -56,6 +71,44 @@ export function feedFixture(
       media_attachments: [],
       favourites_count: i,
     }));
+    return pathname === "/api/v2/search"
+      ? {
+          accounts: [
+            {
+              id: "123",
+              username: "feedcreator",
+              acct: "feedcreator",
+              display_name: "Community Creator",
+              note: "<p>Public fixture account</p>",
+              url: "https://mastodon.social/@feedcreator",
+            },
+          ],
+          statuses,
+          hashtags: [
+            {
+              name: "education",
+              url: "https://mastodon.social/tags/education",
+            },
+          ],
+        }
+      : statuses;
+  }
+  if (
+    provider === "youtube" &&
+    pathname.endsWith("/search") &&
+    query.get("type") === "channel"
+  )
+    return {
+      items: [
+        {
+          id: { channelId: "UC1234567890123456789012" },
+          snippet: {
+            title: "Video Creator",
+            description: "Education videos",
+          },
+        },
+      ],
+    };
   if (provider === "youtube" && pathname.endsWith("/search"))
     return { items: [{ id: { videoId: "abcdefghijk" } }] };
   if (provider === "youtube" && pathname.endsWith("/videos"))
