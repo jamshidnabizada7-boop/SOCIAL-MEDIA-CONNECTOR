@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_FEED_PREFERENCES,
   isOfficialFeedEmbed,
+  isOfficialBlueskyVideo,
+  isOfficialFeedPlayback,
   mixFeed,
   type UniversalFeedItem,
 } from "@aria/shared-types";
@@ -29,6 +31,8 @@ const post = (n = 1) => ({
   replyCount: undefined,
   embed: {
     $type: "app.bsky.embed.video#view",
+    playlist:
+      "https://video.bsky.app/watch/did%3Aplc%3Acreator/fixturevideo/playlist.m3u8",
     thumbnail: "https://video.bsky.app/thumb.jpg",
   },
 });
@@ -45,6 +49,132 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 describe("real feed adapters and safe metadata", () => {
+  it("accepts only provider-owned progressive Facebook media without Graph credentials", () => {
+    expect(
+      isOfficialFeedPlayback(
+        "facebook",
+        "https://video.xx.fbcdn.net/media/clip.mp4?oh=signature&oe=1234567890",
+      ),
+    ).toBe(true);
+    for (const url of [
+      "http://video.xx.fbcdn.net/clip.mp4",
+      "https://video.xx.fbcdn.net.evil.example/clip.mp4",
+      "https://127.0.0.1/clip.mp4",
+      "https://video.xx.fbcdn.net/clip.jpg",
+      "https://video.xx.fbcdn.net/clip.mp4?access_token=private",
+      "https://user:secret@video.xx.fbcdn.net/clip.mp4",
+    ])
+      expect(isOfficialFeedPlayback("facebook", url)).toBe(false);
+    expect(
+      isOfficialFeedPlayback(
+        "instagram",
+        "https://video.xx.fbcdn.net/clip.mp4",
+      ),
+    ).toBe(false);
+  });
+  it("exposes only the public Bluesky playlist belonging to the post's author", async () => {
+    const p = post();
+    const result = await retrieveFeed({
+      provider: "bluesky",
+      kind: "public",
+      config: {},
+      fetchImpl: async () =>
+        json({
+          feed: [
+            { post: p },
+            {
+              post: {
+                ...post(2),
+                embed: {
+                  ...p.embed,
+                  playlist:
+                    "https://video.bsky.app/watch/did%3Aplc%3Aanother/fixturevideo/playlist.m3u8",
+                },
+              },
+            },
+          ],
+        }),
+    });
+    expect(result[0].playbackUrl).toBe(p.embed.playlist);
+    expect(result[1].playbackUrl).toBeUndefined();
+    for (const url of [
+      "https://evil.example/playlist.m3u8",
+      "https://video.bsky.app.evil.example/watch/did%3Aplc%3Acreator/fixturevideo/playlist.m3u8",
+      "https://video.bsky.app/watch/did%3Aplc%3Acreator/fixturevideo/playlist.m3u8?token=private",
+      "http://video.bsky.app/watch/did%3Aplc%3Acreator/fixturevideo/playlist.m3u8",
+    ])
+      expect(isOfficialBlueskyVideo(url)).toBe(false);
+  });
+  it("keeps Facebook photos, album images, link previews and video embeds from authorized Page metadata", async () => {
+    const call = vi.fn(async (_url: string) =>
+      json({
+        data: [
+          {
+            id: "1",
+            message: "Photo",
+            permalink_url: "https://www.facebook.com/owner/posts/1",
+            full_picture: "https://cdn.example/photo.jpg",
+          },
+          {
+            id: "2",
+            message: "Album",
+            permalink_url: "https://www.facebook.com/owner/posts/2",
+            attachments: {
+              data: [
+                {
+                  media_type: "album",
+                  subattachments: {
+                    data: [
+                      {
+                        media: { image: { src: "https://cdn.example/a.jpg" } },
+                      },
+                      {
+                        media: { image: { src: "https://cdn.example/b.jpg" } },
+                      },
+                      { media: { image: { src: "http://127.0.0.1/private" } } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            id: "3",
+            permalink_url: "https://www.facebook.com/reel/123456789/",
+            full_picture: "https://cdn.example/video.jpg",
+            attachments: {
+              data: [
+                {
+                  media_type: "video",
+                  type: "video_inline",
+                  media: {
+                    source:
+                      "https://video.xx.fbcdn.net/media/clip.mp4?oh=signature&oe=1234567890",
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    const rows = await retrieveFeed({
+      provider: "facebook",
+      kind: "account",
+      config: {},
+      account,
+      accessToken: "fixture",
+      fetchImpl: call,
+    });
+    expect(rows[0].images).toEqual([{ url: "https://cdn.example/photo.jpg" }]);
+    expect(rows[1].contentType).toBe("carousel");
+    expect(rows[1].images).toHaveLength(2);
+    expect(rows[2].contentType).toBe("video");
+    expect(isOfficialFeedPlayback("facebook", rows[2].playbackUrl)).toBe(true);
+    expect(isOfficialFeedEmbed("facebook", rows[2].embedUrl)).toBe(true);
+    expect(JSON.stringify(rows)).not.toContain("fixture");
+    expect(String(call.mock.calls[0]?.[0])).toContain("attachments");
+  });
   it.each([
     "!hide",
     "!warn",
@@ -310,6 +440,111 @@ describe("real feed adapters and safe metadata", () => {
     expect(result).toHaveLength(1);
     expect(fetchImpl.mock.calls[0][0]).toContain("/v2/video/list/");
     expect(result[0].canEmbed).toBe(true);
+  });
+  it.each(["facebook", "instagram", "threads"] as const)(
+    "fetches the authorized %s profile photo once for the whole post batch",
+    async (provider) => {
+      const avatar = "https://scontent.fixture.fbcdn.net/profile.jpg?oe=123";
+      const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith(account.externalAccountId)) {
+          expect(url.searchParams.get("fields")).toBe(
+            provider === "facebook"
+              ? "picture.width(96).height(96)"
+              : provider === "instagram"
+                ? "profile_picture_url"
+                : "threads_profile_picture_url",
+          );
+          return json(
+            provider === "facebook"
+              ? { picture: { data: { url: avatar, is_silhouette: false } } }
+              : provider === "instagram"
+                ? { profile_picture_url: avatar }
+                : { threads_profile_picture_url: avatar },
+          );
+        }
+        return json({
+          data: [1, 2].map((n) => ({
+            id: String(n),
+            permalink_url: `https://www.facebook.com/owner/posts/${n}`,
+            permalink:
+              provider === "instagram"
+                ? `https://www.instagram.com/p/ABC${n}/`
+                : `https://www.threads.com/@owner/post/ABC${n}`,
+          })),
+        });
+      });
+      const result = await retrieveFeed({
+        provider,
+        kind: "account",
+        config: {},
+        account,
+        accessToken: "fixture",
+        fetchImpl,
+      });
+      expect(result).toHaveLength(2);
+      expect(result.every((item) => item.authorAvatarUrl === avatar)).toBe(
+        true,
+      );
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    },
+  );
+  it("keeps Facebook posts when the profile photo is unavailable or unsafe", async () => {
+    for (const profile of [
+      null,
+      {
+        picture: {
+          data: {
+            url: "https://scontent.fixture.fbcdn.net/silhouette.jpg",
+            is_silhouette: true,
+          },
+        },
+      },
+      {
+        picture: {
+          data: {
+            url: "https://graph.facebook.com/picture?access_token=private",
+          },
+        },
+      },
+      {
+        picture: {
+          data: {
+            url: "https://graph.facebook.com/picture?appsecret_proof=private",
+          },
+        },
+      },
+      { picture: { data: { url: "javascript:alert(1)" } } },
+    ]) {
+      const rows = await retrieveFeed({
+        provider: "facebook",
+        kind: "account",
+        config: {},
+        account,
+        accessToken: "fixture",
+        fetchImpl: async (input) => {
+          if (
+            new URL(String(input)).pathname.endsWith(account.externalAccountId)
+          )
+            return json(
+              profile || { error: { message: "Profile unavailable" } },
+              profile ? 200 : 503,
+            );
+          return json({
+            data: [
+              {
+                id: "123",
+                message: "Available post",
+                permalink_url: "https://www.facebook.com/owner/posts/123",
+              },
+            ],
+          });
+        },
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].caption).toBe("Available post");
+      expect(rows[0].authorAvatarUrl).toBeUndefined();
+    }
   });
   it.each(["facebook", "instagram", "threads"] as const)(
     "retrieves only authorized %s account metadata and never video streams",

@@ -66,6 +66,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       },
       nav("/feed", "Go to Home Feed", <ArrowRight className="size-4" />, "social discovery perspectives"),
       nav("/explore", "Go to Explore", <Search className="size-4" />, "creators discover"),
+      nav("/search", "Search across platforms", <Search className="size-4" />, "people accounts profiles videos topics"),
       nav("/dashboard", "Go to Creator Studio", <ArrowRight className="size-4" />, "overview publishing"),
       nav("/calendar", "Go to Calendar", <CalendarDays className="size-4" />, "schedule month"),
       nav("/posts", "Go to Posts", <FolderOpen className="size-4" />, "history drafts"),
@@ -90,7 +91,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         icon: <Sparkles className="size-4" />,
         run: (r) => r.push(`/posts/${p.id}`),
       }));
-    return [...cmds, ...postHits];
+    const socialSearch: Command[] = q.length >= 2 ? [{
+      id: "universal-search", label: `Search all platforms for “${query.trim()}”`, hint: "People, posts & videos",
+      icon: <Search className="size-4" />, run: r => r.push(`/search?${new URLSearchParams({q: query.trim().slice(0, 120)})}`),
+    }] : [];
+    return [...cmds, ...socialSearch, ...postHits];
   }, [commands, posts, query]);
 
   const runAt = useCallback(

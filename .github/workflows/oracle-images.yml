@@ -2,11 +2,17 @@ name: Oracle ARM64 release images
 on:
   workflow_dispatch:
   push:
-    branches: [codex/stitch-redesign]
+    branches: [codex/stitch-redesign, codex/universal-search]
     paths:
       - .github/workflows/oracle-images.yml
       - deploy/api.Dockerfile
       - deploy/web.Dockerfile
+      - apps/**
+      - packages/**
+      - e2e/**
+      - e2e-demo/**
+      - package.json
+      - package-lock.json
 permissions:
   contents: read
 jobs:

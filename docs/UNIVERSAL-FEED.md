@@ -2,8 +2,9 @@
 
 Implemented in the existing app at `/feed`, alongside publishing and Social Inbox.
 Deployed on Oracle with the Stitch UI at application revision
-`1d017e373c143256f728d82ea07f61ba6f9857fc`. Migration `0009` added eight tables;
-production now has 49. See [live deployment evidence](ORACLE-STITCH-DEPLOYMENT-2026-10-29.md).
+`a6ad9b4716b7fa48a761eb4176a5d6ad0f034ddd`, including universal search, Bluesky
+autoplay, Facebook Page media and provider profile pictures. Migration `0009` added eight tables;
+production has 49. See [live deployment evidence](ORACLE-SEARCH-MEDIA-RELEASE-2026-10-29.md).
 
 ## What works
 
@@ -33,16 +34,24 @@ Saves, follows, hides, unavailable reports, preferred networks, interests and
 social actions. Likes/comments/shares are display-only metrics when actually
 returned; unknown values remain null. Native actions open the original network.
 
+Profile photos supplied by Bluesky and Mastodon are retained with author metadata.
+Connected Facebook Pages, Instagram accounts and Threads profiles also read their
+authorized profile picture once per post batch. A failed profile request leaves
+the posts available. Provider photos load directly in fixed circular avatars in
+post headers, Creator Spotlight and account search. Missing or failed images use
+initials, and refreshed image URLs can load again. Graph credentials are never
+included in a displayed avatar URL. Photos expire with their cached metadata.
+
 ## Actual provider coverage
 
 | Provider | Enabled retrieval | Playback/display | Required access or limits |
 | --- | --- | --- | --- |
-| Bluesky | Public feed generators, author feeds, search, own posts, authorized following timeline, post URL | Official Bluesky embed for video; attributed text/images | Public AppView needs no login. Following/own account uses its authorized PDS. Default public discovery returned real posts in a read-only probe. |
+| Bluesky | Public feed generators, author feeds, search, own posts, authorized following timeline, post URL | Public provider-owned HLS video plays muted in view; official embed fallback; attributed text/images | Public AppView needs no login. Following/own account uses its authorized PDS. Autoplay can be disabled; browser reduced-motion and data-saving settings are respected. |
 | Mastodon | Public/local timeline, hashtag, author, own statuses, authorized home timeline, status URL | Public images/text; video opens on original instance | Only public statuses. Many instances require authorization even for public timelines. mastodon.social returned HTTP 422 without login in the live probe; the app reports this limitation. |
 | YouTube | Public recent/search/channel results via Data API; authorized channel content; public URL oEmbed | Official privacy-enhanced YouTube player | Discovery needs server-side `YOUTUBE_DATA_API_KEY`; account reads need YouTube authorization. A read-only public URL oEmbed probe returned HTTP 200 video metadata without a key. Only public embeddable videos enter discovery. No claim that duration identifies Shorts. |
 | TikTok | Authorized creator Video List adapter; public video URL oEmbed | Official TikTok Embed Player `/player/v1/{id}` | Video List needs approved Display API/Login Kit and `video.list`. Existing connection/publishing remains disabled pending its real approved connection flow. Public URL support does not provide TikTok For You. |
 | Instagram | Authorized professional-account media; validated post URL reference | Attributed image/thumbnail or original link; video opens on Instagram | Existing Facebook Login integration and appropriate reviewed permissions. Arbitrary consumer feeds, hashtag/business discovery and arbitrary embeds are not enabled. |
-| Facebook | Authorized Page `published_posts`; validated post URL reference | Attributed metadata/preview and original link | Page token and `pages_read_engagement`. A full-picture preview alone is not classified as a photo/video. General Facebook home discovery is unavailable. |
+| Facebook | Authorized Page `published_posts`, photo/album/video attachment metadata; validated post and Reel references | Photo/album images and previews; native provider-owned MP4 video with official player/original-link fallback | Page token and `pages_read_engagement`. Content is labelled as coming from connected Pages. Personal Home feeds and unrestricted other-user timelines are unavailable. |
 | Threads | Authorized profile posts; validated post URL reference | Attributed metadata/preview and original link | `threads_basic` and legitimate connected profile. Configured app credentials alone do not constitute an account connection. |
 | X | Validated public post link references | Original link, clearly preview-only | No metered timeline API is enabled and no paid X discovery calls are made. |
 | LinkedIn | Validated public post link references | Original link, clearly preview-only | No general home feed API; reviewed organization/member retrieval is not enabled. |

@@ -1,6 +1,7 @@
 "use client";
 import { PROVIDERS, type UniversalFeedItem } from "@aria/shared-types";
-import { FeedImage, type FeedCardActions } from "./feed-card";
+import { type FeedCardActions } from "./feed-card";
+import { FeedAvatar } from "./feed-avatar";
 import { Button } from "@/components/ui/button";
 
 /** Only creators returned by the selected, authorized sources appear here. */
@@ -33,17 +34,11 @@ export function CreatorSpotlight({
             key={`${item.provider}:${item.authorId}`}
             className="flex w-40 shrink-0 flex-col items-center rounded-xl bg-studio-soft p-3 text-center"
           >
-            {item.authorAvatarUrl ? (
-              <FeedImage
-                src={item.authorAvatarUrl}
-                alt=""
-                className="size-14 min-h-0 rounded-full object-cover"
-              />
-            ) : (
-              <span className="grid size-14 place-items-center rounded-full bg-accent-soft font-display text-xl font-bold text-accent-ink">
-                {item.authorName.slice(0, 1)}
-              </span>
-            )}
+            <FeedAvatar
+              name={item.authorName}
+              src={item.authorAvatarUrl}
+              className="size-14 font-display text-xl font-bold"
+            />
             <p className="mt-2 w-full truncate text-[13px] font-semibold">
               {item.authorName}
             </p>

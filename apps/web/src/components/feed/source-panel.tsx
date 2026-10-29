@@ -406,6 +406,11 @@ export function FeedSourcePanel({
             </div>
           </fieldset>
           <label className="flex min-h-11 items-start gap-2 text-xs leading-relaxed">
+            <input type="checkbox" className="mt-1" checked={draft.autoplayVideos !== false}
+              onChange={(e) => setDraft((d) => ({...d,autoplayVideos:e.target.checked}))}/>
+            Autoplay supported videos muted while in view. Reduced-motion and data-saving settings are respected.
+          </label>
+          <label className="flex min-h-11 items-start gap-2 text-xs leading-relaxed">
             <input
               type="checkbox"
               className="mt-1"

@@ -274,7 +274,7 @@ export async function retainFeed(
   await db
     .update(feedItems)
     .set({
-      content: sql`(${feedItems.content} - ARRAY['thumbnailUrl','authorAvatarUrl','embedUrl','authorHandle']::text[]) || jsonb_build_object('caption', '', 'images', '[]'::jsonb, 'canEmbed', false, 'availability', 'unavailable', 'likeCount', null, 'commentCount', null, 'shareCount', null)`,
+      content: sql`(${feedItems.content} - ARRAY['thumbnailUrl','authorAvatarUrl','embedUrl','playbackUrl','authorHandle']::text[]) || jsonb_build_object('caption', '', 'images', '[]'::jsonb, 'canEmbed', false, 'availability', 'unavailable', 'likeCount', null, 'commentCount', null, 'shareCount', null)`,
     })
     .where(
       and(

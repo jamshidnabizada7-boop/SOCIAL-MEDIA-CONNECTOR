@@ -24,6 +24,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { useSession, useTheme, useToast } from "@/components/providers";
 import { NAV_ITEMS, MOBILE_NAV } from "./nav-config";
 import { CommandPalette } from "./command-palette";
+import { GlobalSearch } from "./global-search";
 import { Avatar, Skeleton } from "@/components/ui/primitives";
 import { DropdownMenu, Popover } from "@/components/ui/dialog";
 import { notificationsService } from "@/lib/services/notifications";
@@ -573,16 +574,7 @@ function Topbar({
           </Link>
         </nav>
       )}
-      <button
-        onClick={onOpenPalette}
-        className="ml-1 hidden h-10 w-80 items-center gap-2.5 rounded-xl bg-surface-2 px-3 text-sm text-ink-3 transition-colors hover:text-ink-2 lg:flex"
-      >
-        <Search className="size-4" />
-        Search media, posts, tags…
-        <kbd className="ml-auto rounded-md border bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium">
-          ⌘K
-        </kbd>
-      </button>
+      <GlobalSearch onOpenPalette={onOpenPalette} />
       <div className="ml-auto flex items-center gap-1">
         <nav
           aria-label="Studio shortcuts"
@@ -598,13 +590,13 @@ function Topbar({
             Posts
           </Link>
         </nav>
-        <button
-          onClick={onOpenPalette}
-          aria-label="Search or jump to a page"
+        <Link
+          href="/search"
+          aria-label="Search across platforms"
           className="grid size-10 place-items-center rounded-xl hover:bg-surface-2 lg:hidden"
         >
           <Search className="size-5" />
-        </button>
+        </Link>
         <NotificationsBell />
         <DropdownMenu
           width="w-44"

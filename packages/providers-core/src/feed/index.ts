@@ -5,12 +5,17 @@ import type {
   ProviderId,
   UniversalFeedItem,
 } from "@aria/shared-types";
-import { isOfficialFeedEmbed } from "@aria/shared-types";
+import {
+  isOfficialFeedEmbed,
+  isOfficialBlueskyVideo,
+  isOfficialFeedPlayback,
+} from "@aria/shared-types";
 import { graphBase } from "../config.js";
 import { fetchJson, type FetchLike } from "../http.js";
 import { assertPublicHost } from "../net-guard.js";
 import { plainHtml } from "../engagement/util.js";
 import { canonicalFeedUrl, safeFeedUrl } from "./urls.js";
+export { read as readFeedMetadata, mastodonItem as normalizeMastodonFeedItem };
 export { canonicalFeedUrl, safeFeedUrl } from "./urls.js";
 
 export interface FeedContext {
@@ -26,6 +31,7 @@ export interface FeedContext {
   };
   accessToken?: string;
   fetchImpl?: FetchLike;
+  timeoutMs?: number;
 }
 export type RetrievedFeedItem = Omit<
   UniversalFeedItem,
@@ -61,7 +67,7 @@ export function feedCapabilities(): FeedCapability[] {
         "bluesky",
         ["public", "creator", "search", "account", "timeline", "url"],
         "Public feed generators, author feeds and search; authorized following timeline.",
-        "Official Bluesky post player.",
+        "Public Bluesky video stream with in-view playback; official post-player fallback.",
         "Public AppView needs no account. Following timelines require the connected account's authorization.",
         true,
       ],
@@ -231,7 +237,7 @@ async function read(
   const data = await fetchJson<unknown>(ctx.provider, url, {
     ...init,
     redirect: "error",
-    timeoutMs: 15000,
+    timeoutMs: ctx.timeoutMs ?? 15000,
     maxResponseBytes: 2000000,
     fetchImpl: ctx.fetchImpl,
     headers: {
@@ -271,16 +277,9 @@ function base(
     sensitive: false,
   };
 }
-function bskyItem(ctx: FeedContext, p: Obj): RetrievedFeedItem | null {
-  const author = obj(p.author),
-    record = obj(p.record),
-    uri = str(p.uri),
-    embed = obj(p.embed);
-  const labels = [
-    ...array(p.labels),
-    ...array(author.labels),
-    ...array(obj(record.labels).values),
-  ]
+export function publicBlueskyLabels(...groups: unknown[]): string[] | null {
+  const labels = groups
+    .flatMap(array)
     .filter(
       (label) =>
         label.neg !== true &&
@@ -304,6 +303,19 @@ function bskyItem(ctx: FeedContext, p: Obj): RetrievedFeedItem | null {
     )
   )
     return null;
+  return labels;
+}
+function bskyItem(ctx: FeedContext, p: Obj): RetrievedFeedItem | null {
+  const author = obj(p.author),
+    record = obj(p.record),
+    uri = str(p.uri),
+    embed = obj(p.embed);
+  const labels = publicBlueskyLabels(
+    p.labels,
+    author.labels,
+    obj(record.labels).values,
+  );
+  if (!labels) return null;
   const item = base(
     ctx,
     uri,
@@ -336,6 +348,12 @@ function bskyItem(ctx: FeedContext, p: Obj): RetrievedFeedItem | null {
     item.images.length > 1 ? "carousel" : item.images.length ? "image" : "text";
   if (str(embed.$type).includes("video") || str(media.$type).includes("video"))
     item.contentType = "video";
+  const playlist = str(embed.playlist) || str(media.playlist);
+  if (
+    item.contentType === "video" &&
+    isOfficialBlueskyVideo(playlist, item.authorId)
+  )
+    item.playbackUrl = playlist;
   item.thumbnailUrl =
     safeFeedUrl(embed.thumbnail) ||
     safeFeedUrl(media.thumbnail) ||
@@ -410,6 +428,7 @@ async function youtube(ctx: FeedContext): Promise<RetrievedFeedItem[]> {
       ctx.account?.externalAccountId || ctx.config.actor || "",
     );
   else query.set("q", ctx.config.query || "education technology");
+  if (ctx.kind === "search") query.set("safeSearch", "strict");
   const search = await read(
     ctx,
     `https://www.googleapis.com/youtube/v3/search?${query}`,
@@ -646,15 +665,44 @@ export async function retrieveFeed(
   const baseUrl =
     ctx.provider === "threads" ? "https://graph.threads.net/v1.0" : graphBase();
   const fields = isFB
-    ? "id,message,created_time,permalink_url,full_picture"
+    ? "id,message,created_time,permalink_url,full_picture,attachments{media_type,type,media{source,image{src}},subattachments{media_type,type,media{source,image{src}}}}"
     : isIG
       ? "id,caption,media_type,permalink,thumbnail_url,media_url,timestamp,like_count,comments_count"
       : "id,text,media_type,permalink,thumbnail_url,media_url,timestamp,username";
-  const data = await read(
-    ctx,
-    `${baseUrl}/${id(ctx.account.externalAccountId)}/${isFB ? "published_posts" : isIG ? "media" : "threads"}?fields=${fields}&limit=30`,
-    true,
+  const profileField = isFB
+    ? "picture.width(96).height(96)"
+    : isIG
+      ? "profile_picture_url"
+      : "threads_profile_picture_url";
+  const [data, profile] = await Promise.all([
+    read(
+      ctx,
+      `${baseUrl}/${id(ctx.account.externalAccountId)}/${isFB ? "published_posts" : isIG ? "media" : "threads"}?fields=${fields}&limit=30`,
+      true,
+    ),
+    read(
+      { ...ctx, timeoutMs: 6000 },
+      `${baseUrl}/${id(ctx.account.externalAccountId)}?${new URLSearchParams({ fields: profileField })}`,
+      true,
+    ).catch(() => ({}) as Obj),
+  ]);
+  const picture = obj(obj(profile.picture).data);
+  const candidateAvatar = safeFeedUrl(
+    isFB
+      ? picture.is_silhouette === true
+        ? undefined
+        : picture.url
+      : isIG
+        ? profile.profile_picture_url
+        : profile.threads_profile_picture_url,
   );
+  const avatar =
+    candidateAvatar &&
+    !["access_token", "appsecret_proof"].some((key) =>
+      new URL(candidateAvatar).searchParams.has(key),
+    )
+      ? candidateAvatar
+      : undefined;
   return array(data.data).flatMap((p) => {
     const item = base(
       ctx,
@@ -665,6 +713,7 @@ export async function retrieveFeed(
     );
     if (!item) return [];
     item.authorHandle = ctx.account!.handle;
+    item.authorAvatarUrl = avatar;
     item.caption = str(isFB ? p.message : isIG ? p.caption : p.text);
     item.publishedAt = date(
       isFB ? p.created_time : isIG ? p.timestamp : p.timestamp,
@@ -686,6 +735,42 @@ export async function retrieveFeed(
       (item.contentType === "image" ? safeFeedUrl(p.media_url) : undefined);
     if (item.contentType === "image" && item.thumbnailUrl)
       item.images = [{ url: item.thumbnailUrl }];
+    if (isFB) {
+      const attachments = array(obj(p.attachments).data).slice(0, 8);
+      const media = attachments.flatMap((a) => [
+        a,
+        ...array(obj(a.subattachments).data).slice(0, 8),
+      ]);
+      const video = media.some((a) =>
+        /video/i.test(str(a.media_type) + " " + str(a.type)),
+      );
+      const images = [
+        ...new Set(
+          media
+            .map((a) => safeFeedUrl(obj(obj(a.media).image).src))
+            .filter((u): u is string => !!u),
+        ),
+      ].slice(0, 8);
+      item.images = images.map((url) => ({ url }));
+      if (!item.images.length && item.thumbnailUrl)
+        item.images = [{ url: item.thumbnailUrl }];
+      item.thumbnailUrl = item.thumbnailUrl || images[0];
+      item.contentType = video
+        ? "video"
+        : images.length > 1
+          ? "carousel"
+          : item.images.length
+            ? "image"
+            : "text";
+      if (video) {
+        const source = media
+          .map((a) => str(obj(a.media).source))
+          .find((url) => isOfficialFeedPlayback("facebook", url));
+        if (source) item.playbackUrl = source;
+        item.embedUrl = `https://www.facebook.com/plugins/video.php?${new URLSearchParams({ href: item.originalUrl, show_text: "false" })}`;
+        item.canEmbed = isOfficialFeedEmbed("facebook", item.embedUrl);
+      }
+    }
     item.likeCount = metric(p.like_count);
     item.commentCount = metric(p.comments_count);
     return [item];

@@ -44,6 +44,8 @@ export interface UniversalFeedItem {
   thumbnailUrl?: string;
   images: Array<{ url: string; alt?: string }>;
   embedUrl?: string;
+  /** Public provider-owned stream metadata; media bytes go directly to the browser. */
+  playbackUrl?: string;
   originalUrl: string;
   publishedAt: string | null;
   likeCount: number | null;
@@ -81,6 +83,7 @@ export interface FeedPreferences {
   reducedSourceIds: string[];
   showSensitive: boolean;
   allowEmbeds: boolean;
+  autoplayVideos?: boolean;
 }
 export const DEFAULT_FEED_PREFERENCES: FeedPreferences = {
   favoriteProviders: [],
@@ -89,6 +92,7 @@ export const DEFAULT_FEED_PREFERENCES: FeedPreferences = {
   reducedSourceIds: [],
   showSensitive: false,
   allowEmbeds: false,
+  autoplayVideos: true,
 };
 export interface FeedFilters {
   view?: FeedView;
@@ -143,7 +147,80 @@ export function isOfficialFeedEmbed(
           u.pathname,
         )
       );
+    if (
+      provider === "facebook" &&
+      u.hostname === "www.facebook.com" &&
+      u.pathname === "/plugins/video.php"
+    ) {
+      const post = new URL(u.searchParams.get("href") || "");
+      return (
+        post.protocol === "https:" &&
+        !post.username &&
+        !post.password &&
+        !post.port &&
+        ["www.facebook.com", "facebook.com"].includes(post.hostname) &&
+        (/^\/(?:[^/]+\/)?(?:posts|videos)\/[\w]+\/?$/.test(post.pathname) ||
+          /^\/reel\/\d+\/?$/.test(post.pathname) ||
+          /^\/(?:permalink|story)\.php$/.test(post.pathname) ||
+          (post.pathname === "/watch/" &&
+            /^\d+$/.test(post.searchParams.get("v") || "")))
+      );
+    }
     return false;
+  } catch {
+    return false;
+  }
+}
+
+export function isOfficialBlueskyVideo(
+  value?: string,
+  actor?: string,
+): boolean {
+  if (!value) return false;
+  try {
+    const u = new URL(value),
+      parts = u.pathname.split("/");
+    return (
+      u.protocol === "https:" &&
+      u.hostname === "video.bsky.app" &&
+      !u.username &&
+      !u.password &&
+      !u.port &&
+      !u.search &&
+      !u.hash &&
+      parts.length === 5 &&
+      parts[1] === "watch" &&
+      /^did:(?:plc|web):[\w.:%-]+$/.test(decodeURIComponent(parts[2])) &&
+      (!actor || decodeURIComponent(parts[2]) === actor) &&
+      /^[a-z0-9]+$/.test(parts[3]) &&
+      parts[4] === "playlist.m3u8"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** CDN URLs come only from authenticated Page metadata; never expose a Graph access token. */
+export function isOfficialFeedPlayback(
+  provider: ProviderId,
+  value?: string,
+  actor?: string,
+): boolean {
+  if (provider === "bluesky") return isOfficialBlueskyVideo(value, actor);
+  if (provider !== "facebook" || !value) return false;
+  try {
+    const u = new URL(value);
+    return (
+      u.protocol === "https:" &&
+      !u.username &&
+      !u.password &&
+      !u.port &&
+      !u.hash &&
+      u.hostname.endsWith(".fbcdn.net") &&
+      /\.mp4$/i.test(u.pathname) &&
+      !u.searchParams.has("access_token") &&
+      !u.searchParams.has("appsecret_proof")
+    );
   } catch {
     return false;
   }

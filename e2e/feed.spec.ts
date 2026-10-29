@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import path from "node:path";
 async function signup(page: Page) {
   await page.goto("/signup");
   await page.getByLabel("Full name").fill("Feed Browser Tester");
@@ -12,6 +13,24 @@ async function signup(page: Page) {
   await expect(page).toHaveURL(/\/(onboarding|dashboard)$/);
 }
 async function networkFixtures(page: Page) {
+  await page.route("https://video.fixture.fbcdn.net/**", (route) =>
+    route.fulfill({
+      path: path.resolve("e2e/fixtures/autoplay/clip.mp4"),
+      contentType: "video/mp4",
+    }),
+  );
+  await page.route("https://video.bsky.app/**", (route) => {
+    const name = new URL(route.request().url()).pathname.split("/").at(-1)!;
+    if (!/^(playlist\.m3u8|init\.mp4|segment[0-2]\.m4s)$/.test(name))
+      return route.abort();
+    return route.fulfill({
+      path: path.resolve("e2e/fixtures/autoplay", name),
+      contentType: name.endsWith("m3u8")
+        ? "application/vnd.apple.mpegurl"
+        : "video/mp4",
+      headers: { "access-control-allow-origin": "*" },
+    });
+  });
   await page.route("https://cdn.fixture.test/**", (route) =>
     route.fulfill({
       status: 200,
@@ -90,6 +109,115 @@ test("mixed API feed paginates without duplicates and persists user saves and cr
     fullPage: false,
   });
 });
+
+test("author photos render at avatar size and failed photos fall back to initials", async ({
+  page,
+}) => {
+  await networkFixtures(page);
+  await signup(page);
+  await page.goto("/feed");
+  const avatars = page.locator(
+    "article[data-feed-id] header img[data-author-avatar]",
+  );
+  await expect(avatars.first()).toBeVisible({ timeout: 40000 });
+  await expect
+    .poll(() =>
+      avatars
+        .first()
+        .evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0),
+    )
+    .toBe(true);
+  expect(
+    await avatars
+      .first()
+      .evaluate((el) => ({
+        width: el.getBoundingClientRect().width,
+        height: el.getBoundingClientRect().height,
+      })),
+  ).toEqual({ width: 40, height: 40 });
+  await page.route("https://cdn.fixture.test/avatar.jpg", (route) =>
+    route.abort(),
+  );
+  await page.reload();
+  const header = page
+    .locator("article[data-feed-id] header")
+    .filter({ hasText: "Feed Creator" })
+    .first();
+  await expect(header).toBeVisible();
+  await expect(header.locator("img[data-author-avatar]")).toHaveCount(0);
+  await expect(header).toContainText("FC");
+  await expect(header).not.toContainText("Preview unavailable");
+  expect(
+    await header
+      .locator("span[aria-hidden]")
+      .first()
+      .evaluate((el) => el.getBoundingClientRect().width),
+  ).toBe(40);
+});
+
+test("authorized Facebook media plays directly without loading an external iframe", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await networkFixtures(page);
+  await signup(page);
+  await page.goto("/feed");
+  await expect(page.locator("article[data-feed-id]").first()).toBeVisible({
+    timeout: 40000,
+  });
+  await page.route("**/v1/workspaces/*/feed?**", async (route) => {
+    const response = await route.fetch(),
+      body = await response.json();
+    if (!response.ok()) return route.fulfill({ response });
+    const items = body.items
+      .filter((item: { contentType: string }) => item.contentType === "video")
+      .slice(0, 2)
+      .map((item: Record<string, unknown>, index: number) => ({
+        ...item,
+        provider: "facebook",
+        authorName: "Fixture Page",
+        caption: "Authorized Page video fixture",
+        originalUrl: `https://www.facebook.com/reel/${1234567890123 + index}/`,
+        playbackUrl: "https://video.fixture.fbcdn.net/clip.mp4?oe=fixture",
+        embedUrl: undefined,
+        canEmbed: false,
+      }));
+    return route.fulfill({
+      response,
+      json: { ...body, items, nextCursor: null, sourcesPending: false },
+    });
+  });
+  await page.getByRole("tab", { name: "Videos", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Video feed", exact: true })
+    .scrollIntoViewIfNeeded();
+  const video = page.locator('video[data-aria-video="facebook"]');
+  await expect(video).toHaveCount(1);
+  await expect
+    .poll(() =>
+      video.evaluate(
+        (el: HTMLVideoElement) => !el.paused && el.currentTime > 0 && el.muted,
+      ),
+    )
+    .toBe(true);
+  await expect(page.locator("iframe")).toHaveCount(0);
+  const previous = await video.elementHandle();
+  await page.getByRole("button", { name: "Next video", exact: true }).click();
+  await expect
+    .poll(() => previous!.evaluate((el: HTMLVideoElement) => el.paused))
+    .toBe(true);
+  await expect(video).toHaveCount(1);
+  await expect
+    .poll(() =>
+      video.evaluate(
+        (el: HTMLVideoElement) => !el.paused && el.currentTime > 0,
+      ),
+    )
+    .toBe(true);
+  await page.screenshot({
+    path: ".local/search-evidence/facebook-native-mobile.png",
+  });
+});
 test("mobile Feed navigation, official single-player lifecycle, video arrows and API failure are real", async ({
   page,
 }) => {
@@ -110,32 +238,66 @@ test("mobile Feed navigation, official single-player lifecycle, video arrows and
     timeout: 40000,
   });
   await page.getByRole("tab", { name: "Videos", exact: true }).click();
+  await page.getByRole("button", { name: "Bluesky", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Immersive video browsing" }),
   ).toBeVisible();
+  const video = page.locator('video[data-aria-video="bluesky"]');
   await page
-    .getByRole("button", { name: "Load Bluesky player" })
-    .first()
-    .click();
-  await expect(page.locator("iframe")).toHaveCount(1);
+    .getByRole("region", { name: "Video feed", exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect(video).toHaveCount(1);
+  await expect
+    .poll(() =>
+      video.evaluate(
+        (el: HTMLVideoElement) => !el.paused && el.currentTime > 0 && el.muted,
+      ),
+    )
+    .toBe(true);
   await expect(
-    page.getByText(
-      "Bluesky shows the full post. Scroll inside it to reach video controls.",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await expect(page.locator("iframe")).toHaveAttribute(
-    "src",
-    /https:\/\/embed\.bsky\.app\/embed\/did:/,
-  );
+    page.getByRole("button", { name: "Load Bluesky player" }),
+  ).toHaveCount(0);
+  const previous = await video.elementHandle();
   await page.getByRole("button", { name: "Next video", exact: true }).click();
   await expect(page.locator("iframe")).toHaveCount(0);
+  await expect
+    .poll(() => previous!.evaluate((el: HTMLVideoElement) => el.paused))
+    .toBe(true);
+  await expect(video).toHaveCount(1);
+  await expect
+    .poll(() =>
+      video.evaluate(
+        (el: HTMLVideoElement) => !el.paused && el.currentTime > 0 && el.muted,
+      ),
+    )
+    .toBe(true);
   await page.getByRole("region", { name: "Video feed", exact: true }).focus();
   await page.keyboard.press("ArrowDown");
   await page.screenshot({
     path: ".local/feed-evidence/universal-feed-mobile-video.png",
     fullPage: false,
   });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("tab", { name: "Posts", exact: true }).click();
+  await page.getByRole("tab", { name: "Videos", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Video feed", exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole("button", { name: "Play video", exact: true }).first(),
+  ).toBeVisible();
+  await expect(video).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Play video", exact: true })
+    .first()
+    .click();
+  await expect
+    .poll(() =>
+      video.evaluate(
+        (el: HTMLVideoElement) => !el.paused && el.currentTime > 0,
+      ),
+    )
+    .toBe(true);
   await page.getByRole("tab", { name: "Posts", exact: true }).click();
   await page.route("**/v1/workspaces/*/feed?**", (route) =>
     route.fulfill({

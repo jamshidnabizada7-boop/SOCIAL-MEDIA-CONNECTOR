@@ -5,7 +5,7 @@ function hash(text: string): number {
   for (const c of text) n = Math.imul(n ^ c.charCodeAt(0), 16777619);
   return n >>> 0;
 }
-export const feedItemKey = (i: UniversalFeedItem) =>
+export const feedItemKey = (i: Pick<UniversalFeedItem, "provider" | "providerPostId">) =>
   `${i.provider}:${i.providerPostId}`;
 /** Deterministic weighted shuffle followed by provider/creator interleaving. Freeze the result per session. */
 export function mixFeed(

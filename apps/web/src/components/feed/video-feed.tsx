@@ -10,6 +10,7 @@ export function VideoFeed({
   items,
   actions,
   allowEmbeds,
+  autoPlay = true,
   explicitPlayer,
   onActivate,
   onClose,
@@ -22,6 +23,7 @@ export function VideoFeed({
   items: UniversalFeedItem[];
   actions: FeedCardActions;
   allowEmbeds: boolean;
+  autoPlay?: boolean;
   explicitPlayer: string | null;
   onActivate: (id: string) => void;
   onClose: () => void;
@@ -142,6 +144,7 @@ export function VideoFeed({
               actions={actions}
               active={active === item.id}
               allowPlayer={allowEmbeds || explicitPlayer === item.id}
+              autoPlay={autoPlay}
               onActivate={() => {
                 setActiveId(item.id);
                 onActivate(item.id);
