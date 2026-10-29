@@ -8,6 +8,7 @@ import type {
 import {
   isOfficialFeedEmbed,
   isOfficialBlueskyVideo,
+  isOfficialFeedPlayback,
 } from "@aria/shared-types";
 import { graphBase } from "../config.js";
 import { fetchJson, type FetchLike } from "../http.js";
@@ -664,7 +665,7 @@ export async function retrieveFeed(
   const baseUrl =
     ctx.provider === "threads" ? "https://graph.threads.net/v1.0" : graphBase();
   const fields = isFB
-    ? "id,message,created_time,permalink_url,full_picture,attachments{media_type,type,media{image{src}},subattachments{media_type,type,media{image{src}}}}"
+    ? "id,message,created_time,permalink_url,full_picture,attachments{media_type,type,media{source,image{src}},subattachments{media_type,type,media{source,image{src}}}}"
     : isIG
       ? "id,caption,media_type,permalink,thumbnail_url,media_url,timestamp,like_count,comments_count"
       : "id,text,media_type,permalink,thumbnail_url,media_url,timestamp,username";
@@ -732,6 +733,10 @@ export async function retrieveFeed(
             ? "image"
             : "text";
       if (video) {
+        const source = media
+          .map((a) => str(obj(a.media).source))
+          .find((url) => isOfficialFeedPlayback("facebook", url));
+        if (source) item.playbackUrl = source;
         item.embedUrl = `https://www.facebook.com/plugins/video.php?${new URLSearchParams({ href: item.originalUrl, show_text: "false" })}`;
         item.canEmbed = isOfficialFeedEmbed("facebook", item.embedUrl);
       }

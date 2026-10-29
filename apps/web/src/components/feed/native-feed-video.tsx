@@ -5,7 +5,8 @@ import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Only mounted for the visible, selected video; no server proxy or downloaded originals. */
-export function BlueskyVideo({
+export function NativeFeedVideo({
+  provider,
   url,
   poster,
   author,
@@ -13,6 +14,7 @@ export function BlueskyVideo({
   onActivate,
   immersive = false,
 }: {
+  provider: "bluesky" | "facebook";
   url: string;
   poster?: string;
   author: string;
@@ -30,7 +32,10 @@ export function BlueskyVideo({
     if (!el) return;
     let current = true;
     async function setup() {
-      if (el!.canPlayType("application/vnd.apple.mpegurl")) {
+      if (
+        provider === "facebook" ||
+        el!.canPlayType("application/vnd.apple.mpegurl")
+      ) {
         el!.src = url;
         return;
       }
@@ -84,7 +89,7 @@ export function BlueskyVideo({
       el.removeAttribute("src");
       el.load();
     };
-  }, [url]);
+  }, [url, provider]);
   useEffect(() => {
     const el = video.current;
     if (!el) return;
@@ -111,15 +116,15 @@ export function BlueskyVideo({
     >
       <video
         ref={video}
-        aria-label={`Bluesky video by ${author}`}
-        data-aria-video="bluesky"
+        aria-label={`${provider === "facebook" ? "Facebook" : "Bluesky"} video by ${author}`}
+        data-aria-video={provider}
         poster={poster}
         muted
         playsInline
         controls
         loop
         preload="none"
-        crossOrigin="anonymous"
+        crossOrigin={provider === "bluesky" ? "anonymous" : undefined}
         className={cn(
           "w-full object-contain",
           immersive ? "h-full min-h-0" : "max-h-[70dvh] min-h-64",

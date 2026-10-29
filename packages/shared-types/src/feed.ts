@@ -199,3 +199,29 @@ export function isOfficialBlueskyVideo(
     return false;
   }
 }
+
+/** CDN URLs come only from authenticated Page metadata; never expose a Graph access token. */
+export function isOfficialFeedPlayback(
+  provider: ProviderId,
+  value?: string,
+  actor?: string,
+): boolean {
+  if (provider === "bluesky") return isOfficialBlueskyVideo(value, actor);
+  if (provider !== "facebook" || !value) return false;
+  try {
+    const u = new URL(value);
+    return (
+      u.protocol === "https:" &&
+      !u.username &&
+      !u.password &&
+      !u.port &&
+      !u.hash &&
+      u.hostname.endsWith(".fbcdn.net") &&
+      /\.mp4$/i.test(u.pathname) &&
+      !u.searchParams.has("access_token") &&
+      !u.searchParams.has("appsecret_proof")
+    );
+  } catch {
+    return false;
+  }
+}

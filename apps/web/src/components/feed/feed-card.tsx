@@ -19,12 +19,12 @@ import {
 import {
   PROVIDERS,
   isOfficialFeedEmbed,
-  isOfficialBlueskyVideo,
+  isOfficialFeedPlayback,
   type UniversalFeedItem,
 } from "@aria/shared-types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { BlueskyVideo } from "./bluesky-video";
+import { NativeFeedVideo } from "./native-feed-video";
 
 export interface FeedCardActions {
   save: (item: UniversalFeedItem) => void;
@@ -92,9 +92,8 @@ export function FeedPlayer({
     [userStarted, setUserStarted] = useState(false),
     [closed, setClosed] = useState(false);
   const direct =
-    item.provider === "bluesky" &&
     !item.sample &&
-    isOfficialBlueskyVideo(item.playbackUrl, item.authorId);
+    isOfficialFeedPlayback(item.provider, item.playbackUrl, item.authorId);
   const autoActivate = useEffectEvent((entry: IntersectionObserverEntry) => {
     const showing = entry.isIntersecting && entry.intersectionRatio >= 0.6;
     setVisible(entry.isIntersecting);
@@ -168,7 +167,8 @@ export function FeedPlayer({
       )}
     >
       {load && direct ? (
-        <BlueskyVideo
+        <NativeFeedVideo
+          provider={item.provider === "facebook" ? "facebook" : "bluesky"}
           key={item.playbackUrl}
           url={item.playbackUrl!}
           poster={item.thumbnailUrl}

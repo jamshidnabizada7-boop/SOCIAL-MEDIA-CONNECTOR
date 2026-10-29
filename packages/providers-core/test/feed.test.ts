@@ -3,6 +3,7 @@ import {
   DEFAULT_FEED_PREFERENCES,
   isOfficialFeedEmbed,
   isOfficialBlueskyVideo,
+  isOfficialFeedPlayback,
   mixFeed,
   type UniversalFeedItem,
 } from "@aria/shared-types";
@@ -48,6 +49,29 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 describe("real feed adapters and safe metadata", () => {
+  it("accepts only provider-owned progressive Facebook media without Graph credentials", () => {
+    expect(
+      isOfficialFeedPlayback(
+        "facebook",
+        "https://video.xx.fbcdn.net/media/clip.mp4?oh=signature&oe=1234567890",
+      ),
+    ).toBe(true);
+    for (const url of [
+      "http://video.xx.fbcdn.net/clip.mp4",
+      "https://video.xx.fbcdn.net.evil.example/clip.mp4",
+      "https://127.0.0.1/clip.mp4",
+      "https://video.xx.fbcdn.net/clip.jpg",
+      "https://video.xx.fbcdn.net/clip.mp4?access_token=private",
+      "https://user:secret@video.xx.fbcdn.net/clip.mp4",
+    ])
+      expect(isOfficialFeedPlayback("facebook", url)).toBe(false);
+    expect(
+      isOfficialFeedPlayback(
+        "instagram",
+        "https://video.xx.fbcdn.net/clip.mp4",
+      ),
+    ).toBe(false);
+  });
   it("exposes only the public Bluesky playlist belonging to the post's author", async () => {
     const p = post();
     const result = await retrieveFeed({
@@ -119,7 +143,16 @@ describe("real feed adapters and safe metadata", () => {
             permalink_url: "https://www.facebook.com/reel/123456789/",
             full_picture: "https://cdn.example/video.jpg",
             attachments: {
-              data: [{ media_type: "video", type: "video_inline" }],
+              data: [
+                {
+                  media_type: "video",
+                  type: "video_inline",
+                  media: {
+                    source:
+                      "https://video.xx.fbcdn.net/media/clip.mp4?oh=signature&oe=1234567890",
+                  },
+                },
+              ],
             },
           },
         ],
@@ -137,6 +170,7 @@ describe("real feed adapters and safe metadata", () => {
     expect(rows[1].contentType).toBe("carousel");
     expect(rows[1].images).toHaveLength(2);
     expect(rows[2].contentType).toBe("video");
+    expect(isOfficialFeedPlayback("facebook", rows[2].playbackUrl)).toBe(true);
     expect(isOfficialFeedEmbed("facebook", rows[2].embedUrl)).toBe(true);
     expect(JSON.stringify(rows)).not.toContain("fixture");
     expect(String(call.mock.calls[0]?.[0])).toContain("attachments");

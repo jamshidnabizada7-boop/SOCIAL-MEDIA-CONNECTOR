@@ -13,6 +13,12 @@ async function signup(page: Page) {
   await expect(page).toHaveURL(/\/(onboarding|dashboard)$/);
 }
 async function networkFixtures(page: Page) {
+  await page.route("https://video.fixture.fbcdn.net/**", (route) =>
+    route.fulfill({
+      path: path.resolve("e2e/fixtures/autoplay/clip.mp4"),
+      contentType: "video/mp4",
+    }),
+  );
   await page.route("https://video.bsky.app/**", (route) => {
     const name = new URL(route.request().url()).pathname.split("/").at(-1)!;
     if (!/^(playlist\.m3u8|init\.mp4|segment[0-2]\.m4s)$/.test(name))
@@ -101,6 +107,70 @@ test("mixed API feed paginates without duplicates and persists user saves and cr
   await page.screenshot({
     path: ".local/feed-evidence/universal-feed-desktop.png",
     fullPage: false,
+  });
+});
+
+test("authorized Facebook media plays directly without loading an external iframe", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await networkFixtures(page);
+  await signup(page);
+  await page.goto("/feed");
+  await expect(page.locator("article[data-feed-id]").first()).toBeVisible({
+    timeout: 40000,
+  });
+  await page.route("**/v1/workspaces/*/feed?**", async (route) => {
+    const response = await route.fetch(),
+      body = await response.json();
+    if (!response.ok()) return route.fulfill({ response });
+    const items = body.items
+      .filter((item: { contentType: string }) => item.contentType === "video")
+      .slice(0, 2)
+      .map((item: Record<string, unknown>, index: number) => ({
+        ...item,
+        provider: "facebook",
+        authorName: "Fixture Page",
+        caption: "Authorized Page video fixture",
+        originalUrl: `https://www.facebook.com/reel/${1234567890123 + index}/`,
+        playbackUrl: "https://video.fixture.fbcdn.net/clip.mp4?oe=fixture",
+        embedUrl: undefined,
+        canEmbed: false,
+      }));
+    return route.fulfill({
+      response,
+      json: { ...body, items, nextCursor: null, sourcesPending: false },
+    });
+  });
+  await page.getByRole("tab", { name: "Videos", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Video feed", exact: true })
+    .scrollIntoViewIfNeeded();
+  const video = page.locator('video[data-aria-video="facebook"]');
+  await expect(video).toHaveCount(1);
+  await expect
+    .poll(() =>
+      video.evaluate(
+        (el: HTMLVideoElement) => !el.paused && el.currentTime > 0 && el.muted,
+      ),
+    )
+    .toBe(true);
+  await expect(page.locator("iframe")).toHaveCount(0);
+  const previous = await video.elementHandle();
+  await page.getByRole("button", { name: "Next video", exact: true }).click();
+  await expect
+    .poll(() => previous!.evaluate((el: HTMLVideoElement) => el.paused))
+    .toBe(true);
+  await expect(video).toHaveCount(1);
+  await expect
+    .poll(() =>
+      video.evaluate(
+        (el: HTMLVideoElement) => !el.paused && el.currentTime > 0,
+      ),
+    )
+    .toBe(true);
+  await page.screenshot({
+    path: ".local/search-evidence/facebook-native-mobile.png",
   });
 });
 test("mobile Feed navigation, official single-player lifecycle, video arrows and API failure are real", async ({
