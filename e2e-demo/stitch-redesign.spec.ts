@@ -46,6 +46,13 @@ test("Stitch screens keep working at phone, tablet and desktop widths", async ({
         await expect(
           page.locator("article[data-feed-id]").first(),
         ).toBeVisible();
+      if (route === "/videos") {
+        const player = await page.getByRole("region", {name:"Video feed",exact:true}).boundingBox();
+        expect(player).not.toBeNull();
+        expect(player!.y).toBeLessThanOrEqual(150);
+        expect(player!.height).toBeGreaterThan(650);
+        expect(player!.y+player!.height).toBeLessThanOrEqual(901);
+      }
       const overflow = await page.evaluate(() => ({
         width: innerWidth,
         scroll: document.documentElement.scrollWidth,

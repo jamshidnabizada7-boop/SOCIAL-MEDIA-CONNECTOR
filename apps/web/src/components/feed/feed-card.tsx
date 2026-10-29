@@ -164,8 +164,8 @@ export function FeedPlayer({
               src={item.thumbnailUrl}
               alt={`Video preview from ${item.authorName}`}
               className={cn(
-                "w-full object-contain",
-                immersive ? "max-h-full" : "max-h-[500px]",
+                "w-full",
+                immersive ? "h-full max-h-full object-cover" : "max-h-[500px] object-contain",
               )}
             />
           ) : (

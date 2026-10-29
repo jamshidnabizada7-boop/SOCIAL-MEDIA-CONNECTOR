@@ -828,6 +828,7 @@ function MobileNavDrawer({
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { session, ready } = useSession();
   const router = useRouter();
+  const videoPage = usePathname() === "/videos";
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const closeMobileNav = useCallback(() => setMobileNav(false), []);
@@ -931,14 +932,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <EmailVerificationBanner />
         <main
           key={session.workspace.id}
-          className="min-w-0 flex-1 pb-[calc(80px+env(safe-area-inset-bottom,0px))] lg:pb-0"
+          className={cn("min-w-0 flex-1 lg:pb-0", videoPage ? "pb-0" : "pb-[calc(80px+env(safe-area-inset-bottom,0px))]")}
         >
           {children}
         </main>
       </div>
 
       {/* Mobile bottom nav */}
-      <nav
+      {!videoPage && <nav
         className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t bg-surface/95 backdrop-blur-xl lg:hidden"
         aria-label="Primary mobile"
       >
@@ -950,7 +951,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             icon={item.icon}
           />
         ))}
-      </nav>
+      </nav>}
 
       <MobileNavDrawer open={mobileNav} onClose={closeMobileNav} />
       <CommandPalette

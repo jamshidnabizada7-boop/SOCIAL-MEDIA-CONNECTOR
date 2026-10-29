@@ -320,8 +320,9 @@ function PersonalFeed({
   }
   const items = page?.items || [],
     view = filters.view || "for_you";
+  const cinema = initialView === "videos" && view === "videos" && immersive;
   return (
-    <>
+    <div className={cinema ? "cinema-page" : undefined}>
       <PageHeader
         className={view === "explore" ? "discovery-header" : undefined}
         title={
@@ -411,8 +412,8 @@ function PersonalFeed({
           ))}
         </div>
       </PageHeader>
-      <PageBody className="feed-page !pt-0">
-        {DATA_MODE === "mock" ? (
+      <PageBody className={cn("feed-page !pt-0", cinema && "!max-w-none !p-0")}>
+        {DATA_MODE === "mock" && !cinema ? (
           <div
             role="status"
             className="mb-4 rounded-xl bg-accent-soft px-3 py-2 text-xs text-accent-ink"
@@ -421,7 +422,7 @@ function PersonalFeed({
             requests.
           </div>
         ) : null}
-        {view !== "explore" && (
+        {view !== "explore" && !cinema && (
           <div
             className="mb-4 flex gap-2 overflow-x-auto pb-1"
             aria-label="Network filters"
@@ -503,7 +504,7 @@ function PersonalFeed({
             </Button>
           </form>
         )}
-        {(view !== "explore" || exploreFilters) && (
+        {!cinema && (view !== "explore" || exploreFilters) && (
           <details
             className="mb-5 rounded-xl bg-surface-2 p-3"
             open={view === "explore" || undefined}
@@ -722,6 +723,7 @@ function PersonalFeed({
               <>
                 {view === "videos" && immersive ? (
                   <VideoFeed
+                    fullBleed={cinema}
                     items={items}
                     actions={actions}
                     allowEmbeds={preferences.allowEmbeds}
@@ -776,7 +778,7 @@ function PersonalFeed({
                     </div>
                   </>
                 )}
-                <div ref={sentinel} className="py-6 text-center">
+                <div ref={sentinel} className={cn("py-6 text-center", cinema && "hidden")}>
                   {page?.nextCursor ? (
                     <Button
                       variant="secondary"
@@ -885,6 +887,6 @@ function PersonalFeed({
           )}
         </div>
       </PageBody>
-    </>
+    </div>
   );
 }

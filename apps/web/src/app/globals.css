@@ -156,6 +156,22 @@
 
 .discovery-header > div:nth-child(2) { display: none; }
 
+.cinema-page {
+  min-height: calc(100dvh - 64px);
+  background: #0b0f12;
+  --surface: #12181d;
+  --surface-2: #0b0f12;
+  --ink: #ffffff;
+  --ink-2: #d1d5db;
+  --line: #1f2937;
+}
+.cinema-page .page-header { padding: 0; height: 0; }
+.cinema-page .page-header h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.cinema-page .page-header-actions,
+.cinema-page .page-header > div:nth-child(2) { display: none; }
+.cinema-page .video-experience > div:first-child { margin: 0; padding: 4px 12px; min-height: 60px; }
+.video-experience [aria-label="Video feed"]:fullscreen { height: 100dvh; max-width: none; border-radius: 0; }
+
 @media (min-width: 768px) {
   .composer-editor { display: grid; grid-template-columns: minmax(0, .7fr) minmax(0, 1fr); }
   .composer-editor > * { grid-column: 1 / -1; }
