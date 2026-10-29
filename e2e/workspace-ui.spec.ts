@@ -75,7 +75,7 @@ test("workspace sidebar switches real data and new drafts to the selected worksp
   );
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
   expect((await creation).status()).toBe(201);
-  await expect(page).toHaveURL(/\/posts\/[0-9a-f-]+$/);
+  await expect(page).toHaveURL(/\/posts\?tab=drafts$/);
   const secondPosts = await (
     await page.request.get(`${api}/v1/workspaces/${second}/posts`)
   ).json();

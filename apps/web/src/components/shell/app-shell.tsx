@@ -25,7 +25,6 @@ import { useSession, useTheme, useToast } from "@/components/providers";
 import { NAV_ITEMS, MOBILE_NAV } from "./nav-config";
 import { CommandPalette } from "./command-palette";
 import { Avatar, Skeleton } from "@/components/ui/primitives";
-import { Button } from "@/components/ui/button";
 import { DropdownMenu, Popover } from "@/components/ui/dialog";
 import { notificationsService } from "@/lib/services/notifications";
 import { useSubscribe } from "@/lib/services/hooks";
@@ -850,7 +849,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         });
       });
     }
-  }, [ready, session, router]);
+  }, [ready, session, router, toast]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

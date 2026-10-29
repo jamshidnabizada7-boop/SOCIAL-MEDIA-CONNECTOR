@@ -89,6 +89,7 @@ function PersonalFeed({
     [sourcePanel, setSourcePanel] = useState(false),
     [immersive, setImmersive] = useState(initialView === "videos"),
     [playerId, setPlayerId] = useState<string | null>(null);
+  const [exploreFilters, setExploreFilters] = useState(false);
   const generation = useRef(0),
     moreFlight = useRef(false),
     sentinel = useRef<HTMLDivElement>(null);
@@ -322,6 +323,7 @@ function PersonalFeed({
   return (
     <>
       <PageHeader
+        className={view === "explore" ? "discovery-header" : undefined}
         title={
           view === "explore"
             ? "Explore & Discover"
@@ -361,7 +363,10 @@ function PersonalFeed({
         <div
           role="tablist"
           aria-label="Feed categories"
-          className="flex gap-1 overflow-x-auto pb-1"
+          className={cn(
+            "flex gap-1 overflow-x-auto pb-1",
+            view === "explore" && "!hidden",
+          )}
         >
           {tabs.map(([key, label]) => (
             <button
@@ -410,147 +415,224 @@ function PersonalFeed({
         {DATA_MODE === "mock" ? (
           <div
             role="status"
-            className="mb-5 rounded-xl border bg-accent-soft px-4 py-3 text-sm text-accent-ink"
+            className="mb-4 rounded-xl bg-accent-soft px-3 py-2 text-xs text-accent-ink"
           >
-            <strong>Demo feed.</strong> All posts are labelled samples. No
-            social account or provider API is contacted.
+            <strong>Demo feed.</strong> Labelled samples · No provider API
+            requests.
           </div>
         ) : null}
-        <div
-          className="mb-4 flex gap-2 overflow-x-auto pb-1"
-          aria-label="Network filters"
-        >
-          {[
-            undefined,
-            "instagram",
-            "tiktok",
-            "youtube",
-            "threads",
-            "x",
-            "facebook",
-            "bluesky",
-            "mastodon",
-          ].map((p) => (
-            <button
-              key={p || "all"}
-              aria-pressed={filters.provider === p}
-              onClick={() => change({ provider: p as FeedFilters["provider"] })}
-              className={cn(
-                "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 text-xs font-medium",
-                filters.provider === p
-                  ? "bg-accent text-on-accent"
-                  : "bg-studio-soft text-ink-2",
-              )}
-            >
-              <span
-                aria-hidden
-                className="size-2 rounded-full"
-                style={{
-                  backgroundColor: p
-                    ? PROVIDERS[p as keyof typeof PROVIDERS].color
-                    : "currentColor",
-                }}
-              />
-              {p ? PROVIDERS[p as keyof typeof PROVIDERS].name : "All Networks"}
-            </button>
-          ))}
-        </div>
-        <details
-          className="mb-5 rounded-xl bg-surface-2 p-3"
-          open={view === "explore" || undefined}
-        >
-          <summary className="cursor-pointer text-xs font-semibold text-ink-2">
-            Search & filters
-          </summary>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <form onSubmit={search} className="flex min-w-0 flex-1 gap-2">
-              <label className="sr-only" htmlFor="feed-search">
-                Search collected posts
-              </label>
-              <div className="relative min-w-44 flex-1">
-                <Search
-                  className="pointer-events-none absolute left-3 top-3.5 size-4 text-ink-2"
+        {view !== "explore" && (
+          <div
+            className="mb-4 flex gap-2 overflow-x-auto pb-1"
+            aria-label="Network filters"
+          >
+            {[
+              undefined,
+              "instagram",
+              "tiktok",
+              "youtube",
+              "threads",
+              "x",
+              "facebook",
+              "bluesky",
+              "mastodon",
+            ].map((p) => (
+              <button
+                key={p || "all"}
+                aria-pressed={filters.provider === p}
+                onClick={() =>
+                  change({ provider: p as FeedFilters["provider"] })
+                }
+                className={cn(
+                  "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 text-xs font-medium",
+                  filters.provider === p
+                    ? "bg-accent text-on-accent"
+                    : "bg-studio-soft text-ink-2",
+                )}
+              >
+                <span
                   aria-hidden
+                  className="size-2 rounded-full"
+                  style={{
+                    backgroundColor: p
+                      ? PROVIDERS[p as keyof typeof PROVIDERS].color
+                      : "currentColor",
+                  }}
                 />
-                <input
-                  id="feed-search"
-                  className={`${field} w-full pl-9`}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search collected posts"
-                  maxLength={120}
-                />
-              </div>
-              <Button type="submit" variant="secondary" className="min-h-11">
-                Search
-              </Button>
-            </form>
-            <label className="sr-only" htmlFor="feed-platform">
-              Filter platform
+                {p
+                  ? PROVIDERS[p as keyof typeof PROVIDERS].name
+                  : "All Networks"}
+              </button>
+            ))}
+          </div>
+        )}
+        {view === "explore" && (
+          <form
+            onSubmit={search}
+            className="mb-3 flex min-w-0 items-center gap-1 rounded-xl bg-surface-2 p-1"
+          >
+            <Search className="ml-3 size-4 shrink-0 text-ink-2" aria-hidden />
+            <label htmlFor="explore-search" className="sr-only">
+              Search collected posts
             </label>
-            <select
-              id="feed-platform"
-              className={field}
-              value={filters.provider || ""}
-              onChange={(e) =>
-                change({
-                  provider: (e.target.value ||
-                    undefined) as FeedFilters["provider"],
-                })
-              }
+            <input
+              id="explore-search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              maxLength={120}
+              placeholder="Search creators, topics or keywords"
+              className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-offset-0"
+            />
+            <Button
+              type="submit"
+              variant="ghost"
+              className="min-h-11 px-2 text-xs"
             >
-              <option value="">All platforms</option>
-              {(Object.keys(PROVIDERS) as Array<keyof typeof PROVIDERS>).map(
-                (p) => (
-                  <option value={p} key={p}>
-                    {PROVIDERS[p].name}
-                  </option>
-                ),
+              Search
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="min-h-11 min-w-11"
+              aria-label="Filter discovery content"
+              aria-expanded={exploreFilters}
+              onClick={() => setExploreFilters((v) => !v)}
+            >
+              <SlidersHorizontal className="size-4" />
+            </Button>
+          </form>
+        )}
+        {(view !== "explore" || exploreFilters) && (
+          <details
+            className="mb-5 rounded-xl bg-surface-2 p-3"
+            open={view === "explore" || undefined}
+          >
+            <summary className="cursor-pointer text-xs font-semibold text-ink-2">
+              Search & filters
+            </summary>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {view !== "explore" && (
+                <form onSubmit={search} className="flex min-w-0 flex-1 gap-2">
+                  <label className="sr-only" htmlFor="feed-search">
+                    Search collected posts
+                  </label>
+                  <div className="relative min-w-44 flex-1">
+                    <Search
+                      className="pointer-events-none absolute left-3 top-3.5 size-4 text-ink-2"
+                      aria-hidden
+                    />
+                    <input
+                      id="feed-search"
+                      className={`${field} w-full pl-9`}
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search collected posts"
+                      maxLength={120}
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    className="min-h-11"
+                  >
+                    Search
+                  </Button>
+                </form>
               )}
-            </select>
-            <label className="sr-only" htmlFor="feed-topic">
-              Filter topic
-            </label>
-            <select
-              id="feed-topic"
-              className={field}
-              value={filters.topic || ""}
-              onChange={(e) => change({ topic: e.target.value || undefined })}
-            >
-              <option value="">All topics</option>
-              {FEED_TOPICS.map((t) => (
-                <option value={t} key={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-            {view !== "videos" ? (
-              <>
-                <label className="sr-only" htmlFor="feed-type">
-                  Filter content type
-                </label>
-                <select
-                  id="feed-type"
-                  className={field}
-                  value={filters.contentType || ""}
-                  onChange={(e) =>
-                    change({
-                      contentType: (e.target.value ||
-                        undefined) as FeedFilters["contentType"],
+              <label className="sr-only" htmlFor="feed-platform">
+                Filter platform
+              </label>
+              <select
+                id="feed-platform"
+                className={field}
+                value={filters.provider || ""}
+                onChange={(e) =>
+                  change({
+                    provider: (e.target.value ||
+                      undefined) as FeedFilters["provider"],
+                  })
+                }
+              >
+                <option value="">All platforms</option>
+                {(Object.keys(PROVIDERS) as Array<keyof typeof PROVIDERS>).map(
+                  (p) => (
+                    <option value={p} key={p}>
+                      {PROVIDERS[p].name}
+                    </option>
+                  ),
+                )}
+              </select>
+              <label className="sr-only" htmlFor="feed-topic">
+                Filter topic
+              </label>
+              <select
+                id="feed-topic"
+                className={field}
+                value={filters.topic || ""}
+                onChange={(e) => change({ topic: e.target.value || undefined })}
+              >
+                <option value="">All topics</option>
+                {FEED_TOPICS.map((t) => (
+                  <option value={t} key={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              {view !== "videos" ? (
+                <>
+                  <label className="sr-only" htmlFor="feed-type">
+                    Filter content type
+                  </label>
+                  <select
+                    id="feed-type"
+                    className={field}
+                    value={filters.contentType || ""}
+                    onChange={(e) =>
+                      change({
+                        contentType: (e.target.value ||
+                          undefined) as FeedFilters["contentType"],
+                      })
+                    }
+                  >
+                    <option value="">All formats</option>
+                    {["video", "image", "carousel", "text", "link"].map((t) => (
+                      <option value={t} key={t}>
+                        {t[0].toUpperCase() + t.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : null}
+            </div>
+            {view === "explore" && (
+              <div className="mt-3 flex flex-wrap gap-2 sm:hidden">
+                <Button
+                  variant="secondary"
+                  onClick={() => setSourcePanel((v) => !v)}
+                  aria-expanded={sourcePanel}
+                >
+                  <SlidersHorizontal className="size-4" />
+                  Sources & preferences
+                </Button>
+                <Button
+                  variant="ghost"
+                  loading={actionBusy}
+                  onClick={() =>
+                    void action(async () => {
+                      await feedService.sync(ws, userId);
+                      reset();
+                      toast({ title: "Source refresh requested" });
                     })
                   }
                 >
-                  <option value="">All formats</option>
-                  {["video", "image", "carousel", "text", "link"].map((t) => (
-                    <option value={t} key={t}>
-                      {t[0].toUpperCase() + t.slice(1)}
-                    </option>
-                  ))}
-                </select>
-              </>
-            ) : null}
-          </div>
-        </details>
+                  <RefreshCw className="size-4" />
+                  Refresh
+                </Button>
+              </div>
+            )}
+          </details>
+        )}
         {view === "explore" && (
           <>
             <div
@@ -597,8 +679,11 @@ function PersonalFeed({
         >
           <section
             id="feed-results"
-            role="tabpanel"
-            aria-labelledby={`feed-tab-${view}`}
+            role={view === "explore" ? "region" : "tabpanel"}
+            aria-label={view === "explore" ? "Curated Feed" : undefined}
+            aria-labelledby={
+              view !== "explore" ? `feed-tab-${view}` : undefined
+            }
             aria-busy={loading}
             className="min-w-0"
           >

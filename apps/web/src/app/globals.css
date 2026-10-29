@@ -154,6 +154,8 @@
   --ink-2: #d1d5db;
 }
 
+.discovery-header > div:nth-child(2) { display: none; }
+
 @media (min-width: 768px) {
   .composer-editor { display: grid; grid-template-columns: minmax(0, .7fr) minmax(0, 1fr); }
   .composer-editor > * { grid-column: 1 / -1; }
@@ -162,6 +164,9 @@
 }
 
 @media (max-width: 767px) {
+  .discovery-header { padding-top: 0; padding-bottom: 0; }
+  .discovery-header h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .discovery-header .page-header-actions { display: none; }
   .studio-page .page-header h1,
   .composer-page .page-header h1,
   .accounts-page .page-header h1 { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

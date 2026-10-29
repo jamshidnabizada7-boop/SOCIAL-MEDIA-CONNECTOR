@@ -57,6 +57,7 @@ test("Stitch screens keep working at phone, tablet and desktop widths", async ({
         overflow.scroll,
         `${route} overflows at ${width}px: ${JSON.stringify(overflow.elements)}`,
       ).toBeLessThanOrEqual(width + 1);
+      if (width === 390) await page.screenshot({path:`.local/stitch-evidence/${route.slice(1)}-mobile.png`});
     }
   }
   expect(errors).toEqual([]);
@@ -73,6 +74,15 @@ test("mobile navigation, creator follows and conversation context are usable", a
   await expect(page).toHaveURL(/\/explore$/);
   const spotlight = page.getByRole("region", { name: "Creator Spotlight" });
   await expect(spotlight).toBeVisible();
+  await page.getByRole("button", { name: "Filter discovery content" }).click();
+  await page
+    .getByLabel("Filter platform", { exact: true })
+    .selectOption("bluesky");
+  await expect(page.locator("article[data-feed-id]").first()).toContainText(
+    "Bluesky",
+  );
+  await page.getByLabel("Filter platform", { exact: true }).selectOption("");
+  await page.getByRole("button", { name: "Filter discovery content" }).click();
   await spotlight
     .getByRole("button", { name: /^Follow .* in Aria Hub$/ })
     .first()
@@ -128,6 +138,7 @@ test("mobile navigation, creator follows and conversation context are usable", a
   await expect(
     page.getByRole("region", { name: "Conversation" }),
   ).toBeVisible();
+  await page.screenshot({path:".local/stitch-evidence/inbox-desktop.png"});
   await page
     .getByRole("button", { name: "Switch workspace", exact: true })
     .click();

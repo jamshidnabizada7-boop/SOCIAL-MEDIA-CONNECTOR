@@ -352,12 +352,15 @@ function AccountsInner() {
                   Reauthorization required
                 </p>
                 <p className="text-[13px] text-ink-2">
-                  {unhealthy.map((a) => a.displayName).join(", ")} revoked
-                  access. Scheduled content to these accounts is paused safely —
-                  nothing half-publishes.
+                  Reconnect{" "}
+                  {unhealthy.length === 1
+                    ? "this channel"
+                    : `${unhealthy.length} channels`}{" "}
+                  to resume publishing.
                 </p>
               </div>
               <Button
+                className="w-full sm:w-auto"
                 loading={busy === unhealthy[0].id}
                 onClick={() => reconnect(unhealthy[0])}
               >

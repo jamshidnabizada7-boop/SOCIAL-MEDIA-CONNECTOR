@@ -56,6 +56,7 @@ jobs:
             .local/load-test.json
             .local/feed-load-test.json
             .local/feed-evidence/
+            .local/stitch-evidence/
           retention-days: 7
   containers:
     runs-on: ubuntu-latest
