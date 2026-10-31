@@ -1,0 +1,54 @@
+name: Flutter Android MVP
+
+on:
+  push:
+    branches:
+      - feature/flutter-android-mvp-20261031
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/flutter-android.yml'
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/flutter-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Android platform scaffolding
+        run: flutter create --platforms=android --project-name aria_social_mobile --org com.myariahub .
+      - name: Remove generated starter test (uses non-existent MyApp)
+        run: rm -f test/widget_test.dart
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze Flutter code
+        run: flutter analyze
+      - name: Run Flutter tests
+        run: flutter test
+      - name: Build installable Android debug APK
+        run: flutter build apk --debug --dart-define=API_BASE_URL=https://app.myariahub.com
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-in-one-social-android-debug-apk
+          path: apps/mobile/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
