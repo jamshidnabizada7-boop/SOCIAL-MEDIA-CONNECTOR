@@ -111,7 +111,13 @@ class _SocialHomeState extends State<SocialHome> {
       await api.restore();
       if (api.cookie != null) await loadMe();
     } catch (_) {
-      await sessionStore.delete(key: 'session');
+      // Storage plugins are unavailable in widget tests and can fail on devices.
+      // Never keep the sign-in screen loading because cleanup also failed.
+      try {
+        await sessionStore.delete(key: 'session');
+      } catch (_) {
+        // Continue with a signed-out session when storage is unavailable.
+      }
       api.cookie = null;
     }
     if (mounted) setState(() => loading = false);
