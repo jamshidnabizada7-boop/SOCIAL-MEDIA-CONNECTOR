@@ -170,8 +170,8 @@ class _SocialHomeState extends State<SocialHome> {
   }
 
   @override Widget build(BuildContext context) {
-    if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (!signedIn) return Scaffold(body: SafeArea(child: Center(child: SingleChildScrollView(
+    if (loading) { return const Scaffold(body: Center(child: CircularProgressIndicator())); }
+    if (!signedIn) { return Scaffold(body: SafeArea(child: Center(child: SingleChildScrollView(
       padding: const EdgeInsets.all(24), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 430),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Icon(Icons.hub_rounded, size: 62, color: navy), const SizedBox(height: 16),
@@ -192,7 +192,7 @@ class _SocialHomeState extends State<SocialHome> {
         TextButton(onPressed: () => setState(() { register = !register; error = null; }),
           child: Text(register ? 'Already registered? Sign in' : 'New here? Create account')),
       ])),
-    ))));
+    )))); }
     return Scaffold(
       appBar: AppBar(title: const Text('All-in-One Social'), actions: [
         IconButton(tooltip: 'Refresh', onPressed: refresh, icon: const Icon(Icons.refresh)),
