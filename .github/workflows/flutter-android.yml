@@ -35,6 +35,8 @@ jobs:
           cache: true
       - name: Generate Android platform scaffolding
         run: flutter create --platforms=android --project-name aria_social_mobile --org com.myariahub .
+      - name: Remove generated starter test (uses non-existent MyApp)
+        run: rm -f test/widget_test.dart
       - name: Resolve dependencies
         run: flutter pub get
       - name: Analyze Flutter code
