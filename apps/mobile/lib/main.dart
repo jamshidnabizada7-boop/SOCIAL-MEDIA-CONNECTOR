@@ -154,11 +154,13 @@ class _SocialHomeState extends State<SocialHome> {
     try {
       final a = await api.request('GET', '/v1/workspaces/$workspace/accounts');
       final i = await api.request('GET', '/v1/workspaces/$workspace/inbox?limit=30');
-      if (mounted) setState(() {
-        accounts = a['accounts'] is List ? a['accounts'] : [];
-        inbox = i['items'] is List ? i['items'] : [];
-        error = null;
-      });
+      if (mounted) {
+        setState(() {
+          accounts = a['accounts'] is List ? a['accounts'] : [];
+          inbox = i['items'] is List ? i['items'] : [];
+          error = null;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
     }
