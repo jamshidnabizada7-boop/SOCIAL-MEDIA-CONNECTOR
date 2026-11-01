@@ -282,7 +282,7 @@ function AccountsInner() {
               />
             </h2>
             <p className="mt-1 text-xs text-ink-2">
-              Connect your accounts using the network's secure sign-in. No developer account required.
+              Connect your accounts using the network&apos;s secure sign-in. No developer account required.
             </p>
           </div>
           <Button
