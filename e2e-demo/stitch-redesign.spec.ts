@@ -200,3 +200,21 @@ test("studio calendar and mobile destination selection use real local state", as
     "Caption remains editable after redesign.",
   );
 });
+
+test("direct social connect actions are obvious on mobile without developer setup", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openDemo(page);
+  await page.goto("/accounts");
+
+  const facebook = page.getByRole("button", { name: /Connect Facebook/ });
+  const instagram = page.getByRole("button", { name: /Connect Instagram/ });
+  const others = page.getByRole("button", { name: /Other networks/ });
+  await expect(facebook).toBeVisible();
+  await expect(instagram).toBeVisible();
+  await expect(others).toBeVisible();
+
+  await facebook.click();
+  await expect(page.getByRole("dialog", { name: /Authorize Facebook/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
