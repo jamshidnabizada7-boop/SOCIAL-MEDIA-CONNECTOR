@@ -19,6 +19,15 @@ type ApiStep =
   | { kind: "working"; provider: ProviderId }
   | { kind: "error"; provider: ProviderId; message: string; code?: string };
 
+/** Redirect only to a secure, server-authorized provider login URL. */
+async function beginOAuth(provider: ProviderId, workspaceId: string, brandId?: string): Promise<void> {
+  const query = `workspaceId=${encodeURIComponent(workspaceId)}${brandId ? `&brandId=${encodeURIComponent(brandId)}` : ""}&format=json`;
+  const { url } = await apiGet<{ url: string }>(`/v1/oauth/${provider}/authorize?${query}`);
+  const destination = new URL(url);
+  if (destination.protocol !== "https:") throw new Error("The network returned an unsafe sign-in address.");
+  window.location.assign(destination.href);
+}
+
 /**
  * API-mode connect flow: Bluesky uses an app password, Mastodon redirects to
  * the instance's own authorize screen, and configured OAuth providers go
@@ -59,14 +68,43 @@ export function ConnectFlowApi({
       .then(({ options: available }) => {
         if (!active) return;
         setOptions(available);
-        if (initialProvider === "bluesky" && available.some(o => o.provider === initialProvider && o.status === "available")) setStep({ kind: "bluesky", state: "form" });
-        if (initialProvider === "mastodon" && available.some(o => o.provider === initialProvider && o.status === "available")) setStep({ kind: "mastodon", state: "instance" });
+        if (!initialProvider) return;
+        const choice = available.find(o => o.provider === initialProvider);
+        if (!choice || choice.status !== "available") {
+          setStep({
+            kind: "error",
+            provider: initialProvider,
+            message: session?.user.isAdmin
+              ? choice?.message ?? "Connection is not configured."
+              : "This network is not available right now. The app team needs to restore the connection; you do not need a developer account.",
+            code: choice?.status === "setup_required" ? "provider_unconfigured" : "provider_unavailable",
+          });
+          return;
+        }
+        if (initialProvider === "bluesky") {
+          setStep({ kind: "bluesky", state: "form" });
+        } else if (initialProvider === "mastodon") {
+          setStep({ kind: "mastodon", state: "instance" });
+        } else {
+          // One user tap selects a network and starts its real OAuth flow.
+          // Only the official server authorization endpoint mints the state.
+          setStep({ kind: "working", provider: initialProvider });
+          void beginOAuth(initialProvider, workspaceId, session?.brandId ?? undefined).catch((err) => {
+            if (!active) return;
+            setStep({
+              kind: "error",
+              provider: initialProvider,
+              message: err instanceof Error ? err.message : "Connection failed.",
+              code: err instanceof ApiError ? err.code : undefined,
+            });
+          });
+        }
       })
       .catch((err) => {
         if (active) setOptionsError(err instanceof ApiError ? err.message : "Could not check available networks. Please try again.");
       });
     return () => { active = false; };
-  }, [open, workspaceId, initialProvider, reload]);
+  }, [open, workspaceId, initialProvider, reload, session?.brandId, session?.user.isAdmin]);
 
   if (!session) return null;
 
@@ -116,10 +154,7 @@ export function ConnectFlowApi({
     setStep({ kind: "working", provider });
     setError(null);
     try {
-      const res = await apiGet<{ url: string }>(
-        `/v1/oauth/${provider}/authorize?workspaceId=${session.workspace.id}${session.brandId ? `&brandId=${session.brandId}` : ""}&format=json`
-      );
-      window.location.assign(res.url);
+      await beginOAuth(provider, session.workspace.id, session.brandId ?? undefined);
     } catch (err) {
       setStep({
         kind: "error",
@@ -193,7 +228,11 @@ export function ConnectFlowApi({
             {options.filter(o => o.status !== "available").map(o => <p key={o.provider} className="mt-2"><strong>{PROVIDERS[o.provider].name}:</strong> {o.message}</p>)}
             {session.user.isAdmin && <Link href="/admin" onClick={onClose} className="mt-2 inline-block font-semibold text-accent underline">Manage provider credentials</Link>}
           </div>}
-          <p className="text-xs text-ink-3">Availability reflects server setup. Each network may still require app approval and permission to access your accounts.</p>
+          <p className="text-xs text-ink-3">
+            Connect with your normal social account. You never need Meta for Developers or a developer login.
+            Facebook supports authorized Pages, while Instagram requires a supported professional account.
+            If Meta displays “Feature Unavailable”, the platform owner must resolve Meta app setup/review before general connections can work.
+          </p>
           </>}
         </div>
       )}
@@ -279,8 +318,8 @@ export function ConnectFlowApi({
                 </p>
               ) : (
                 <p className="mt-1">
-                  A platform admin needs to register a developer app for this network and paste its credentials under
-                  Admin → Provider credentials.
+                  The app team must finish this network’s approval or configuration. You do not need to open a
+                  developer account or share your social password. Please try another available network meanwhile.
                 </p>
               )}
               <p className="mt-2 text-ink-3">
