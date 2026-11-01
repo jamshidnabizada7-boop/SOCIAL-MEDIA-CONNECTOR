@@ -174,8 +174,15 @@ function AccountsInner() {
   }, []);
 
   useEffect(() => {
-    if (params.get("connect") === "1") setConnectOpen(true);
     const connect = params.get("connect");
+    if (connect === "1") {
+      setConnectOpen(true);
+    } else if (connect && Object.prototype.hasOwnProperty.call(PROVIDERS, connect)) {
+      // A direct link from the Android app or web connects the chosen network
+      // without forcing the user through a second provider picker.
+      setInitialProvider(connect as ProviderId);
+      setConnectOpen(true);
+    }
     if (connect === "error") {
       const reason = params.get("reason");
       const messages: Record<string, string> = {
@@ -265,8 +272,8 @@ function AccountsInner() {
 
       <PageBody className="space-y-5 !pt-0">
         <ProfileOverview accounts={accounts} />
-        <div className="flex items-center justify-between gap-3">
-          <div>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="min-w-0 flex-1 basis-full sm:basis-auto">
             <h2 className="font-display text-[17px] font-bold">
               Connected Channels{" "}
               <span
@@ -275,16 +282,41 @@ function AccountsInner() {
               />
             </h2>
             <p className="mt-1 text-xs text-ink-2">
-              OAuth token health & connection status
+              Connect your accounts using the network's secure sign-in. No developer account required.
             </p>
           </div>
           <Button
-            aria-label="Connect account"
             className="min-h-11 px-3"
-            onClick={() => setConnectOpen(true)}
+            onClick={() => {
+              setInitialProvider("facebook");
+              setConnectOpen(true);
+            }}
+          >
+            <ProviderBadge provider="facebook" size="sm" />
+            Connect Facebook
+          </Button>
+          <Button
+            variant="secondary"
+            className="min-h-11 px-3"
+            onClick={() => {
+              setInitialProvider("instagram");
+              setConnectOpen(true);
+            }}
+          >
+            <ProviderBadge provider="instagram" size="sm" />
+            Connect Instagram
+          </Button>
+          <Button
+            variant="soft"
+            aria-label="Connect another account"
+            className="min-h-11 px-3"
+            onClick={() => {
+              setInitialProvider(undefined);
+              setConnectOpen(true);
+            }}
           >
             <Users className="size-4" />
-            <span className="hidden sm:inline">Connect account</span>
+            Other networks
           </Button>
           <Button
             variant="soft"
@@ -374,10 +406,10 @@ function AccountsInner() {
           <EmptyState
             icon={<ShieldCheck className="size-5" />}
             title="No accounts connected"
-            body="Connect your first social account to start publishing everywhere."
+            body="Choose Facebook, Instagram, or another supported network above. You only sign in with that network; the app owner manages developer settings."
             action={
-              <Button onClick={() => setConnectOpen(true)}>
-                Connect account
+              <Button onClick={() => { setInitialProvider(undefined); setConnectOpen(true); }}>
+                Choose a network
               </Button>
             }
           />
